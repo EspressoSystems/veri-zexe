@@ -8,11 +8,11 @@ extern crate std;
 
 mod circuit;
 pub mod constants;
-mod errors;
+pub mod errors;
 mod examples;
 pub mod keys;
 pub mod predicates;
-mod proofs;
+pub mod proofs;
 pub mod structs;
 pub mod transaction;
 mod types;

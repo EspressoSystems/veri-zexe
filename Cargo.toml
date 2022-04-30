@@ -24,3 +24,10 @@ hkdf = "0.12.0"
 chacha20poly1305 = "0.9.0"
 curve25519-dalek = "4.0.0-pre.1"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "dpc_algo"
+harness = false

@@ -1,3 +1,5 @@
+//! Transaction-related Proof preprocessing, generation, verification API
+
 use crate::{
     constants::{NONNATIVE_FIELD_M, RANGE_BIT_LEN},
     errors::DPCApiError,
@@ -199,8 +201,7 @@ impl DPCPublicInput {
 /// - DPC proving key
 /// - DPC verification key
 /// - total number of constraints of the utxo/outer circuit
-#[allow(dead_code)] // TODO: remove
-pub(crate) fn preprocess<'a>(
+pub fn preprocess<'a>(
     outer_srs: &'a OuterUniversalParam,
     inner_srs: &'a InnerUniversalParam,
     non_fee_input_size: usize,
