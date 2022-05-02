@@ -10,8 +10,9 @@ use crate::{
 use ark_ec::ProjectiveCurve;
 use ark_ff::Zero;
 use ark_std::{
-    format,
+    end_timer, format,
     rand::{CryptoRng, RngCore},
+    start_timer,
     string::ToString,
     vec,
     vec::Vec,
@@ -101,6 +102,7 @@ pub fn preprocess<'a>(
     num_input_records: usize,
     inner_policy_domain_size: usize,
 ) -> Result<(PoliciesVfyProvingKey<'a>, PoliciesVfyVerifyingKey, usize), DPCApiError> {
+    let setup_time = start_timer!(|| "policy: pp time");
     let (dummy_circuit, n_constraints) = PoliciesVfyCircuit::build_for_preprocessing(
         inner_srs,
         num_input_records,
@@ -115,7 +117,7 @@ pub fn preprocess<'a>(
                 ))
             },
         )?;
-
+    end_timer!(setup_time);
     Ok((
         PoliciesVfyProvingKey {
             proving_key,
@@ -146,6 +148,7 @@ pub(crate) fn prove<R>(
 where
     R: RngCore + CryptoRng,
 {
+    let proof_time = start_timer!(|| "policy: total prove time");
     if proving_key.num_input_records != witness.input_death_vks.len()
         || proving_key.num_input_records != witness.output_birth_vks.len()
     {
@@ -162,7 +165,7 @@ where
         .0
         .check_circuit_satisfiability(&pub_input.to_scalars())?;
 
-    PlonkKzgSnark::<OuterPairingEngine>::prove::<_, _, StandardTranscript>(
+    let res = PlonkKzgSnark::<OuterPairingEngine>::prove::<_, _, StandardTranscript>(
         rng,
         &circuit.0,
         &proving_key.proving_key,
@@ -173,7 +176,9 @@ where
             "Outer policies verification circuit: proof creation failure: {:?}",
             e
         ))
-    })
+    });
+    end_timer!(proof_time);
+    res
 }
 
 /// Verify a proof for the policy circuit
@@ -190,7 +195,8 @@ pub(crate) fn verify(
     extra_transcript_init_msg: Option<Vec<u8>>,
     proof: &PoliciesVfyValidityProof,
 ) -> Result<(), DPCApiError> {
-    PlonkKzgSnark::<OuterPairingEngine>::verify::<StandardTranscript>(
+    let veri_time = start_timer!(|| "utxo: total verify time");
+    let res = PlonkKzgSnark::<OuterPairingEngine>::verify::<StandardTranscript>(
         verifying_key,
         &public_inputs.to_scalars(),
         proof,
@@ -201,7 +207,9 @@ pub(crate) fn verify(
             "Policies circuit proof verification failure: {}",
             e
         ))
-    })
+    });
+    end_timer!(veri_time);
+    res
 }
 
 impl PoliciesVfyWitness {

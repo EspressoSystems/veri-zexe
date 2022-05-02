@@ -24,7 +24,9 @@ use crate::{
 use ark_ff::{Field, UniformRand};
 use ark_serialize::{CanonicalSerialize, *};
 use ark_std::{
+    end_timer,
     rand::{CryptoRng, RngCore},
+    start_timer,
     string::ToString,
     vec::Vec,
 };
@@ -141,6 +143,8 @@ impl DPCPublicInput {
         memo: Vec<InnerScalarField>,
         beta_g: InnerG1Affine,
     ) -> Result<Self, DPCApiError> {
+        let setup_time = start_timer!(|| "tx: public input");
+
         // derive utxo circuit public input
         let utxo_public_input = DPCUtxoPublicInput::from_witness(&witness.utxo_witness, fee, memo)?;
 
@@ -180,7 +184,7 @@ impl DPCPublicInput {
             &[utxo_public_input.commitment_local_data],
             &witness.policies_vfy_witness.batch_proof,
         )?;
-
+        end_timer!(setup_time);
         Ok(Self {
             utxo_public_input,
             inner_partial_vfy_proof: policies_vfy_public_input.partial_plonk_proof,
@@ -206,6 +210,8 @@ pub(crate) fn preprocess<'a>(
     non_fee_input_size: usize,
     unmerged_inner_policy_domain_size: usize,
 ) -> Result<(DPCProvingKey<'a>, DPCVerifyingKey, (usize, usize)), DPCApiError> {
+    let setup_time = start_timer!(|| "tx: pp time");
+
     let (utxo_proving_key, utxo_verifying_key, utxo_n_constraints) =
         preprocess_utxo_keys(inner_srs, non_fee_input_size)?;
 
@@ -227,7 +233,7 @@ pub(crate) fn preprocess<'a>(
         utxo_verifying_key,
         policies_vfy_verifying_key,
     };
-
+    end_timer!(setup_time);
     Ok((
         dpc_proving_key,
         dpc_verifying_key,
@@ -243,6 +249,8 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     witness: &DPCWitness,
     public_inputs: &DPCPublicInput,
 ) -> Result<DPCValidityProof, DPCApiError> {
+    let proof_time = start_timer!(|| "tx: total prove time");
+
     // compute inner UTXO proof
 
     let utxo_proof = super::utxo::prove_utxo(
@@ -275,7 +283,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
         &pub_input,
         None,
     )?;
-
+    end_timer!(proof_time);
     Ok(DPCValidityProof {
         utxo_proof,
         policies_vfy_proof,
@@ -288,6 +296,7 @@ pub(crate) fn verify(
     verifying_key: &DPCVerifyingKey,
     public_inputs: &DPCPublicInput,
 ) -> Result<(), DPCApiError> {
+    let veri_time = start_timer!(|| "tx: total verify time");
     // check UTXO proof
     super::utxo::verify_utxo(
         &proof.utxo_proof,
@@ -309,10 +318,12 @@ pub(crate) fn verify(
     )?;
 
     // check inner partial verification proof
-    predicates::decide(
+    let res = predicates::decide(
         &verifying_key.utxo_verifying_key.open_key,
         &proof.inner_partial_vfy_proof,
-    )
+    );
+    end_timer!(veri_time);
+    res
 }
 
 #[cfg(test)]

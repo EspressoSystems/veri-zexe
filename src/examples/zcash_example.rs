@@ -301,7 +301,7 @@ mod test {
     const NON_NATIVE_ASSET_ID: u64 = 2u64;
 
     #[test]
-    #[ignore]
+    // #[ignore]
     fn test_zcash_example_transaction() -> Result<(), DPCApiError> {
         // universal setup
         let rng = &mut test_rng();
@@ -374,6 +374,9 @@ mod test {
         input_note_values: &[u64],
         output_note_values: &[u64],
     ) -> Result<(), DPCApiError> {
+        ark_std::println!("\n===========================\n");
+        ark_std::println!("{} inputs and outputs predicates", input_note_values.len());
+
         let num_non_fee_inputs = input_note_values.len();
         assert_eq!(num_non_fee_inputs, output_note_values.len());
 
@@ -381,6 +384,16 @@ mod test {
 
         let (dpc_pk, dpc_vk, mut birth_predicate, birth_pid, mut death_predicate, death_pid) =
             ZcashPredicate::preprocess(&inner_srs, &outer_srs, num_non_fee_inputs + 1)?;
+
+        ark_std::println!(
+            "birth predicate circuit size: {}",
+            (*birth_predicate.0.predicate.circuit_mut_ref()).num_gates()
+        );
+
+        ark_std::println!(
+            "birth predicate circuit size: {}",
+            (*death_predicate.0.predicate.circuit_mut_ref()).num_gates()
+        );
 
         // generate proof generation key and addresses
         let mut wsk = [0u8; 32];

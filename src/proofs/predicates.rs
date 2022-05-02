@@ -7,8 +7,9 @@ use crate::{
 };
 use ark_ec::AffineCurve;
 use ark_std::{
-    format,
+    end_timer, format,
     rand::{CryptoRng, RngCore},
+    start_timer,
     string::ToString,
     vec,
     vec::Vec,
@@ -125,6 +126,7 @@ where
         PlonkPredicate = PlonkPredicate<'a, InnerPairingEngine>,
     >,
 {
+    let proof_time = start_timer!(|| "predicate: total prove time");
     let birth_predicates: Vec<P::PlonkPredicate> =
         birth_predicates.iter().map(|x| x.predicate()).collect();
     let death_predicates: Vec<P::PlonkPredicate> =
@@ -137,7 +139,7 @@ where
     .map_err(|e| {
         DPCApiError::InvalidParameters(format!("Preprocessing predicate circuit of failed: {}", e))
     })?;
-
+    end_timer!(proof_time);
     Ok(proof)
 }
 
@@ -162,6 +164,7 @@ where
         Proof = BatchProof<InnerPairingEngine>,
     >,
 {
+    let veri_time = start_timer!(|| "predicate: total verify time");
     let verifying_keys =
         BatchArgument::aggregate_verify_keys(birth_vks, death_vks).map_err(|e| {
             DPCApiError::GeneralError(format!("Verification key aggregation failed: {}", e))
@@ -171,12 +174,14 @@ where
         [public_inputs, public_inputs].concat();
     let pub_inputs = vec![&merged_pub_input_per_instance[..]; vks_ref.len()];
 
-    PlonkKzgSnark::<InnerPairingEngine>::verify_batch_proof::<InnerTranscript>(
+    let res = PlonkKzgSnark::<InnerPairingEngine>::verify_batch_proof::<InnerTranscript>(
         &vks_ref,
         &pub_inputs,
         batch_proof,
     )
-    .map_err(|e| DPCApiError::InvalidParameters(format!("Inner batch proof is invalid: {}", e)))
+    .map_err(|e| DPCApiError::InvalidParameters(format!("Inner batch proof is invalid: {}", e)));
+    end_timer!(veri_time);
+    res
 }
 
 /// Decide if an inner circuit partial verification proof is valid.

@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^1.0", default-features = false }
+# uncomment me to dump the tracing data
+# ark-std = { version = "0.3.0", default-features = false, features = ["print-trace"] }
 ark-std = { version = "0.3.0", default-features = false }
 ark-serialize = { version = "0.3.0", default-features = false }
 ark-ec = { version = "0.3.0", default-features = false }

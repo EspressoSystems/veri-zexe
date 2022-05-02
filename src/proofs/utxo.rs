@@ -13,8 +13,9 @@ use crate::{
 };
 use ark_ff::UniformRand;
 use ark_std::{
+    end_timer,
     rand::{CryptoRng, RngCore},
-    vec,
+    start_timer, vec,
     vec::Vec,
 };
 use jf_plonk::{
@@ -106,6 +107,8 @@ impl DPCUtxoPublicInput {
         fee: u64,
         memo: Vec<InnerScalarField>,
     ) -> Result<Self, DPCApiError> {
+        let setup_time = start_timer!(|| "utxo: prepare public input");
+
         // 1. aggregate verification key
         let ver_keys_refs: Vec<_> = witness
             .entire_inputs
@@ -159,6 +162,8 @@ impl DPCUtxoPublicInput {
             .map(|input| input.ro.nullify(&input.proof_gen_key.nk))
             .collect::<Result<Vec<_>, _>>()?;
 
+        end_timer!(setup_time);
+
         Ok(DPCUtxoPublicInput {
             root,
             fee,
@@ -199,11 +204,16 @@ pub(super) fn prove_utxo<R: RngCore + CryptoRng>(
     witness: &DPCUtxoWitness,
     public_inputs: &DPCUtxoPublicInput,
 ) -> Result<ProofUtxo, DPCApiError> {
+    let proof_time = start_timer!(|| "utxo: total prove time");
+
     let utxo_circuit =
         DPCUtxoCircuit::build(witness, public_inputs).map_err(DPCApiError::FailedSnark)?;
-
-    PlonkKzgSnark::prove::<_, _, StandardTranscript>(rng, &utxo_circuit.0, proving_key, None)
-        .map_err(DPCApiError::FailedSnark)
+    ark_std::println!("utxo: circuit size {}", utxo_circuit.0.num_gates());
+    let proof =
+        PlonkKzgSnark::prove::<_, _, StandardTranscript>(rng, &utxo_circuit.0, proving_key, None)
+            .map_err(DPCApiError::FailedSnark);
+    end_timer!(proof_time);
+    proof
 }
 
 pub(super) fn verify_utxo(
@@ -211,13 +221,13 @@ pub(super) fn verify_utxo(
     verifying_key: &UtxoVerifyingKey,
     public_input: &DPCUtxoPublicInput,
 ) -> Result<(), DPCApiError> {
-    jf_plonk::proof_system::PlonkKzgSnark::<InnerPairingEngine>::verify::<StandardTranscript>(
-        verifying_key,
-        &public_input.to_scalars(),
-        proof,
-        None,
-    )
-    .map_err(DPCApiError::FailedSnark)
+    let veri_time = start_timer!(|| "utxo: total verify time");
+    let res = jf_plonk::proof_system::PlonkKzgSnark::<InnerPairingEngine>::verify::<
+        StandardTranscript,
+    >(verifying_key, &public_input.to_scalars(), proof, None)
+    .map_err(DPCApiError::FailedSnark);
+    end_timer!(veri_time);
+    res
 }
 
 // `num_non_fee_inputs` is the number of inputs that exclude the fee input.
@@ -225,10 +235,12 @@ pub(crate) fn preprocess_utxo_keys(
     srs: &InnerUniversalParam,
     num_non_fee_inputs: usize,
 ) -> Result<(UtxoProvingKey, UtxoVerifyingKey, usize), DPCApiError> {
+    let setup_time = start_timer!(|| "utxo: pp time");
     let dummy_circuit = DPCUtxoCircuit::build_for_preprocessing(num_non_fee_inputs)?;
     let (proving_key, verifying_key) =
         PlonkKzgSnark::<InnerPairingEngine>::preprocess(srs, &dummy_circuit.0)
             .map_err(DPCApiError::FailedSnark)?;
+    end_timer!(setup_time);
     Ok((proving_key, verifying_key, dummy_circuit.0.num_gates()))
 }
 
