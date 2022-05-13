@@ -31,9 +31,11 @@ use curve25519_dalek::{
 };
 use hkdf::Hkdf;
 use jf_plonk::proof_system::structs::VerifyingKey;
-use jf_primitives::{commitment::Commitment, merkle_tree::AccMemberWitness, prf::PRF};
+use jf_primitives::{
+    commitment::Commitment, hash_to_group::HashToGroup, merkle_tree::AccMemberWitness, prf::PRF,
+};
 use jf_rescue::Permutation;
-use jf_utils::{fq_to_fr_with_mask, hash_to_curve, tagged_blob};
+use jf_utils::{fq_to_fr_with_mask, tagged_blob};
 
 #[tagged_blob("NULLIFIER")]
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
@@ -213,7 +215,8 @@ impl ReceiverMemo {
         let esk: InnerEmbeddedScalarField = InnerEmbeddedScalarField::rand(rng);
         // diversified base `g_d = HashToGroup(d)`
         let diversified_base =
-            hash_to_curve::<sha2::Sha256, GroupProjective<InnerEmbeddedGroup>, _>(&receiver.d)?;
+            <InnerEmbeddedGroup as HashToGroup>::hash_to_group(&receiver.d, &"diversified base")?;
+
         // derive ephemeral public key `epk = g_d ^ esk`
         let epk = Group::mul(&diversified_base, &esk);
         // enc key = KDF(pk_d ^ esk)

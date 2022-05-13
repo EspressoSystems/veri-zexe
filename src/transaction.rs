@@ -9,7 +9,9 @@ use crate::{
         utxo::DPCUtxoPublicInput,
     },
     structs::{NoteInput, Nullifier, RecordOpening},
-    types::{CommitmentValue, InnerScalarField, NodeValue, SigKeyPair, SigVerKey},
+    types::{
+        CommitmentValue, InnerEmbeddedGroup, InnerScalarField, NodeValue, SigKeyPair, SigVerKey,
+    },
 };
 use ark_serialize::{CanonicalSerialize, *};
 use ark_std::{
@@ -17,6 +19,7 @@ use ark_std::{
     string::ToString,
     vec::Vec,
 };
+use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
 use jf_utils::{hash_to_field, tagged_blob};
 
 /// DPC transaction note body
@@ -52,11 +55,13 @@ impl DPCTxnNote {
     /// Verify authorization signature
     pub fn verify_authorization(&self) -> Result<(), DPCApiError> {
         let hashed_body = self.body.hash_to_inner_scalar()?;
-        self.body
-            .aux_info
-            .auth_verification_key
-            .verify(&[hashed_body], &self.signature)
-            .map_err(DPCApiError::FailedAuthorizationSignature)
+        <SchnorrSignatureScheme<InnerEmbeddedGroup> as SignatureScheme>::verify(
+            &(), // empty public parameter
+            &self.body.aux_info.auth_verification_key,
+            &[hashed_body],
+            &self.signature,
+        )
+        .map_err(DPCApiError::FailedAuthorizationSignature)
     }
 }
 /// DPC transaction note body
@@ -97,7 +102,7 @@ impl DPCTxnBody {
     /// Generate a DPC transaction Body
     ///
     /// NOTE: `input_death_predicates` and `output_birth_predicates` exclude
-    /// that of the first input (fee) and output (fee change) since their don't
+    /// that of the first input (fee) and output (fee change) since they don't
     /// have any predicate.
     #[allow(clippy::too_many_arguments)]
     pub fn generate<'a, R: CryptoRng + RngCore>(
@@ -153,7 +158,12 @@ impl DPCTxnBody {
     /// object
     pub fn authorize(self, authorization_keypair: &SigKeyPair) -> Result<DPCTxnNote, DPCApiError> {
         let hashed = self.hash_to_inner_scalar()?;
-        let signature = authorization_keypair.sign(&[hashed]);
+        // TODO: (alex) use `<SchnorrSignatureScheme<InnerEmbeddedGroup> as
+        // SignatureScheme>::sign()` instead
+        let signature = authorization_keypair.sign(
+            &[hashed],
+            <SchnorrSignatureScheme<InnerEmbeddedGroup> as SignatureScheme>::CS_ID,
+        );
         Ok(DPCTxnNote {
             body: self,
             signature,
