@@ -6,6 +6,8 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(test)]
+mod bench;
 mod circuit;
 pub mod constants;
 pub mod errors;

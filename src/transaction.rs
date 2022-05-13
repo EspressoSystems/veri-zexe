@@ -16,7 +16,6 @@ use ark_std::{
     rand::{CryptoRng, RngCore},
     string::ToString,
     vec::Vec,
-    UniformRand,
 };
 use jf_utils::{hash_to_field, tagged_blob};
 
@@ -96,6 +95,10 @@ pub struct DPCNoteAuxInfo {
 
 impl DPCTxnBody {
     /// Generate a DPC transaction Body
+    ///
+    /// NOTE: `input_death_predicates` and `output_birth_predicates` exclude
+    /// that of the first input (fee) and output (fee change) since their don't
+    /// have any predicate.
     #[allow(clippy::too_many_arguments)]
     pub fn generate<'a, R: CryptoRng + RngCore>(
         rng: &mut R,
@@ -106,6 +109,7 @@ impl DPCTxnBody {
         output_birth_predicates: &[Predicate],
         fee: u64,
         memo: Vec<InnerScalarField>,
+        local_data_commitment_randomness: InnerScalarField,
     ) -> Result<DPCTxnBody, DPCApiError> {
         // check parameters are correct
         crate::utils::txn_parameter_sanity_check(
@@ -117,14 +121,13 @@ impl DPCTxnBody {
         )?;
 
         // assemble witness
-        let blinding_local_data = InnerScalarField::rand(rng);
         let witness = DPCWitness::new_unchecked(
             rng,
             inputs,
             outputs,
             input_death_predicates,
             output_birth_predicates,
-            blinding_local_data,
+            local_data_commitment_randomness,
         )?;
         // derive transaction public inputs
         let pub_input = DPCPublicInput::from_witness(&witness, fee, memo, proving_key.beta_g)?;

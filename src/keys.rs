@@ -25,7 +25,7 @@ use crate::{constants::dom_sep::*, errors::DPCApiError, types::*};
 /// Key pair for transaction authorization
 #[tagged_blob("AUTH-KEY")]
 #[derive(Clone, Default, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct AuthorizationKeyPair(schnorr::KeyPair<InnerEmbeddedGroup>);
+pub struct AuthorizationKeyPair(pub(crate) schnorr::KeyPair<InnerEmbeddedGroup>);
 
 impl AuthorizationKeyPair {
     /// Getter for the public key

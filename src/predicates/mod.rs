@@ -28,6 +28,12 @@ where
     /// Get the actual, unwrapped predicate.
     fn predicate(&self) -> Self::PlonkPredicate;
 
+    // TODO: (alex) make this trait generic over field and PredicateCircuit:
+    // Circuit<F> in order to have generic default implementation.
+
+    /// Get the number of constraints in the underlying `PredicateCircuit`
+    fn num_constraints(&self) -> usize;
+
     /// Return a pointer to the verification key
     fn verifying_key(&self) -> &Self::VerificationKey;
 

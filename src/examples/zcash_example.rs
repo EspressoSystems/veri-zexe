@@ -76,7 +76,7 @@ use ark_std::vec::Vec;
 use jf_plonk::circuit::{Arithmetization, Circuit, PlonkCircuit};
 
 // A simple wrapper of predicate circuit
-struct ZcashPredicateCircuit(PredicateCircuit);
+pub(crate) struct ZcashPredicateCircuit(pub(crate) PredicateCircuit);
 
 impl From<PredicateCircuit> for ZcashPredicateCircuit {
     fn from(circuit: PredicateCircuit) -> Self {
@@ -85,7 +85,7 @@ impl From<PredicateCircuit> for ZcashPredicateCircuit {
 }
 
 // A simple wrapper of predicate
-struct ZcashPredicate<'a>(Predicate<'a>);
+pub(crate) struct ZcashPredicate<'a>(pub(crate) Predicate<'a>);
 
 impl<'a> From<Predicate<'a>> for ZcashPredicate<'a> {
     fn from(predicate: Predicate<'a>) -> Self {

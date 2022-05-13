@@ -2,7 +2,7 @@
 
 mod restricted_zcash_example;
 mod tornado_cash_example;
-mod zcash_example;
+pub(crate) mod zcash_example;
 
 use crate::{
     circuit::{
