@@ -9,7 +9,7 @@ use jf_plonk::proof_system::PlonkKzgSnark;
 
 pub(crate) mod policies_vfy;
 pub(crate) mod predicates;
-pub(crate) mod transaction;
+pub mod transaction;
 pub(crate) mod utxo;
 
 /// One-time universal setup for parameters to be used in proving utxo relation

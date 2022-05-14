@@ -9,15 +9,17 @@ use crate::{
         utxo::DPCUtxoPublicInput,
     },
     structs::{NoteInput, Nullifier, RecordOpening},
-    types::{CommitmentValue, InnerScalarField, NodeValue, SigKeyPair, SigVerKey},
+    types::{
+        CommitmentValue, InnerEmbeddedGroup, InnerScalarField, NodeValue, SigKeyPair, SigVerKey,
+    },
 };
 use ark_serialize::{CanonicalSerialize, *};
 use ark_std::{
     rand::{CryptoRng, RngCore},
     string::ToString,
     vec::Vec,
-    UniformRand,
 };
+use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
 use jf_utils::{hash_to_field, tagged_blob};
 
 /// DPC transaction note body
@@ -53,11 +55,13 @@ impl DPCTxnNote {
     /// Verify authorization signature
     pub fn verify_authorization(&self) -> Result<(), DPCApiError> {
         let hashed_body = self.body.hash_to_inner_scalar()?;
-        self.body
-            .aux_info
-            .auth_verification_key
-            .verify(&[hashed_body], &self.signature)
-            .map_err(DPCApiError::FailedAuthorizationSignature)
+        <SchnorrSignatureScheme<InnerEmbeddedGroup> as SignatureScheme>::verify(
+            &(), // empty public parameter
+            &self.body.aux_info.auth_verification_key,
+            &[hashed_body],
+            &self.signature,
+        )
+        .map_err(DPCApiError::FailedAuthorizationSignature)
     }
 }
 /// DPC transaction note body
@@ -96,6 +100,10 @@ pub struct DPCNoteAuxInfo {
 
 impl DPCTxnBody {
     /// Generate a DPC transaction Body
+    ///
+    /// NOTE: `input_death_predicates` and `output_birth_predicates` exclude
+    /// that of the first input (fee) and output (fee change) since they don't
+    /// have any predicate.
     #[allow(clippy::too_many_arguments)]
     pub fn generate<'a, R: CryptoRng + RngCore>(
         rng: &mut R,
@@ -106,6 +114,7 @@ impl DPCTxnBody {
         output_birth_predicates: &[Predicate],
         fee: u64,
         memo: Vec<InnerScalarField>,
+        local_data_commitment_randomness: InnerScalarField,
     ) -> Result<DPCTxnBody, DPCApiError> {
         // check parameters are correct
         crate::utils::txn_parameter_sanity_check(
@@ -117,14 +126,13 @@ impl DPCTxnBody {
         )?;
 
         // assemble witness
-        let blinding_local_data = InnerScalarField::rand(rng);
         let witness = DPCWitness::new_unchecked(
             rng,
             inputs,
             outputs,
             input_death_predicates,
             output_birth_predicates,
-            blinding_local_data,
+            local_data_commitment_randomness,
         )?;
         // derive transaction public inputs
         let pub_input = DPCPublicInput::from_witness(&witness, fee, memo, proving_key.beta_g)?;
@@ -150,7 +158,12 @@ impl DPCTxnBody {
     /// object
     pub fn authorize(self, authorization_keypair: &SigKeyPair) -> Result<DPCTxnNote, DPCApiError> {
         let hashed = self.hash_to_inner_scalar()?;
-        let signature = authorization_keypair.sign(&[hashed]);
+        // TODO: (alex) use `<SchnorrSignatureScheme<InnerEmbeddedGroup> as
+        // SignatureScheme>::sign()` instead
+        let signature = authorization_keypair.sign(
+            &[hashed],
+            <SchnorrSignatureScheme<InnerEmbeddedGroup> as SignatureScheme>::CS_ID,
+        );
         Ok(DPCTxnNote {
             body: self,
             signature,

@@ -1,3 +1,5 @@
+//! Transaction-related Proof preprocessing, generation, verification API
+
 use crate::{
     constants::{NONNATIVE_FIELD_M, RANGE_BIT_LEN},
     errors::DPCApiError,
@@ -80,7 +82,7 @@ impl<'a> DPCWitness<'a> {
         for predicate in input_death_predicates {
             if !predicate.is_finalized {
                 return Err(DPCApiError::InternalError(
-                    "The input predicate is already finalized".to_string(),
+                    "The input predicate hasn't been finalized".to_string(),
                 ));
             }
         }
@@ -88,7 +90,7 @@ impl<'a> DPCWitness<'a> {
         for predicate in output_birth_predicates {
             if !predicate.is_finalized {
                 return Err(DPCApiError::InternalError(
-                    "The input predicate is already finalized".to_string(),
+                    "The input predicate hasn't been finalized".to_string(),
                 ));
             }
         }
@@ -199,8 +201,7 @@ impl DPCPublicInput {
 /// - DPC proving key
 /// - DPC verification key
 /// - total number of constraints of the utxo/outer circuit
-#[allow(dead_code)] // TODO: remove
-pub(crate) fn preprocess<'a>(
+pub fn preprocess<'a>(
     outer_srs: &'a OuterUniversalParam,
     inner_srs: &'a InnerUniversalParam,
     non_fee_input_size: usize,
@@ -216,6 +217,15 @@ pub(crate) fn preprocess<'a>(
             non_fee_input_size,
             unmerged_inner_policy_domain_size,
         )?;
+
+    #[cfg(test)]
+    {
+        ark_std::println!(
+            "ℹ️ num_constraint of UTXO circuit: {}, of outer circuit: {}",
+            utxo_n_constraints,
+            outer_n_constraints,
+        );
+    }
 
     let dpc_proving_key = DPCProvingKey {
         utxo_proving_key,

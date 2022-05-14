@@ -161,7 +161,7 @@ fn check_fee(
         ));
     }
     // check fee amount is correct
-    if fee_chg_output.payload.data[1] - fee_input.payload.data[1]
+    if fee_input.payload.data[1] - fee_chg_output.payload.data[1]
         != crate::types::InnerScalarField::from(fee as u128)
     {
         return Err(DPCApiError::InvalidParameter(

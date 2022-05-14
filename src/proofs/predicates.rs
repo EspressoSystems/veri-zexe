@@ -14,7 +14,7 @@ use ark_std::{
     vec::Vec,
 };
 use jf_plonk::{
-    circuit::PlonkCircuit,
+    circuit::{Circuit, PlonkCircuit},
     proof_system::{
         batch_arg::{BatchArgument, Instance as PlonkPredicate},
         structs::{BatchProof, OpenKey, ProvingKey, VerifyingKey},
@@ -61,6 +61,13 @@ impl<'a> PredicateTrait<'a> for Predicate<'a> {
     fn predicate(&self) -> Self::PlonkPredicate {
         // TODO: improve the code here to avoid the clones
         self.predicate.clone()
+    }
+
+    /// Get the number of constraints in the underlying `PredicateCircuit`
+    fn num_constraints(&self) -> usize {
+        // TODO: (alex) poor API design, can't get a immutable reference to the
+        // underlying `PlonkCircuit`/`Instance` in jf-plonk
+        self.predicate().circuit_mut_ref().num_gates()
     }
 
     /// Return a pointer to the verification key

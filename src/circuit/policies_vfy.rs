@@ -130,6 +130,13 @@ impl PoliciesVfyCircuit {
         circuit.point_equal_gate(&pub_input.partial_plonk_proof.0, &expected_partial_proof.0)?;
         circuit.point_equal_gate(&pub_input.partial_plonk_proof.1, &expected_partial_proof.1)?;
         let n_constraints = circuit.num_gates();
+        #[cfg(test)]
+        {
+            ark_std::println!(
+                "ℹ️ num_constraint of (unpadded) outer circuit: {}",
+                circuit.num_gates(),
+            );
+        }
         circuit.finalize_for_arithmetization()?;
         Ok((Self(circuit), n_constraints))
     }

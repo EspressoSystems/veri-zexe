@@ -31,9 +31,11 @@ use curve25519_dalek::{
 };
 use hkdf::Hkdf;
 use jf_plonk::proof_system::structs::VerifyingKey;
-use jf_primitives::{commitment::Commitment, merkle_tree::AccMemberWitness, prf::PRF};
+use jf_primitives::{
+    commitment::Commitment, hash_to_group::TEHashToGroup, merkle_tree::AccMemberWitness, prf::PRF,
+};
 use jf_rescue::Permutation;
-use jf_utils::{fq_to_fr_with_mask, hash_to_curve, tagged_blob};
+use jf_utils::{fq_to_fr_with_mask, tagged_blob};
 
 #[tagged_blob("NULLIFIER")]
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
@@ -212,8 +214,15 @@ impl ReceiverMemo {
         // randomly sample an ephemeral secret key,
         let esk: InnerEmbeddedScalarField = InnerEmbeddedScalarField::rand(rng);
         // diversified base `g_d = HashToGroup(d)`
-        let diversified_base =
-            hash_to_curve::<sha2::Sha256, GroupProjective<InnerEmbeddedGroup>, _>(&receiver.d)?;
+        let diversified_base = {
+            let mut d_bytes = vec![];
+            receiver.d.serialize(&mut d_bytes)?;
+            <InnerEmbeddedGroup as TEHashToGroup>::hash_to_group::<&[u8]>(
+                &d_bytes,
+                "diversified base".as_ref(),
+            )?
+        };
+
         // derive ephemeral public key `epk = g_d ^ esk`
         let epk = Group::mul(&diversified_base, &esk);
         // enc key = KDF(pk_d ^ esk)

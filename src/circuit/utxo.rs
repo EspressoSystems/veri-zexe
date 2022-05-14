@@ -232,6 +232,13 @@ impl DPCUtxoCircuit {
                 public_input_var.predicates_commitment,
             )?;
         }
+        #[cfg(test)]
+        {
+            ark_std::println!(
+                "ℹ️ num_constraint of (unpadded) UTXO circuit: {}",
+                circuit.num_gates(),
+            );
+        }
         circuit.finalize_for_arithmetization()?;
         Ok(DPCUtxoCircuit(circuit))
     }

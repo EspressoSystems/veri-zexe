@@ -17,15 +17,15 @@ use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar as Curve25519Scalar,
 };
-use jf_primitives::{commitment, prf::PrfKey, signatures::schnorr};
-use jf_utils::{hash_to_curve, tagged_blob};
+use jf_primitives::{commitment, hash_to_group::TEHashToGroup, prf::PrfKey, signatures::schnorr};
+use jf_utils::tagged_blob;
 
 use crate::{constants::dom_sep::*, errors::DPCApiError, types::*};
 
 /// Key pair for transaction authorization
 #[tagged_blob("AUTH-KEY")]
 #[derive(Clone, Default, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct AuthorizationKeyPair(schnorr::KeyPair<InnerEmbeddedGroup>);
+pub struct AuthorizationKeyPair(pub(crate) schnorr::KeyPair<InnerEmbeddedGroup>);
 
 impl AuthorizationKeyPair {
     /// Getter for the public key
@@ -150,8 +150,15 @@ impl KeyChainMasterKey {
 
         let pk = {
             // diversified base `g_d = HashToGroup(d)`
-            let diversified_base =
-                hash_to_curve::<sha2::Sha256, GroupProjective<InnerEmbeddedGroup>, _>(&d)?;
+            let diversified_base = {
+                let mut d_bytes = vec![];
+                d.serialize(&mut d_bytes)?;
+                <InnerEmbeddedGroup as TEHashToGroup>::hash_to_group::<&[u8]>(
+                    &d_bytes,
+                    "diversified base".as_ref(),
+                )?
+            };
+
             // diversified public key `pk_d = g_d^ivk`
             Group::mul(&diversified_base, &ivk.0)
         };
