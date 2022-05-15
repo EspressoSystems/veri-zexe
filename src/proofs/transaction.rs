@@ -28,6 +28,7 @@ use ark_serialize::{CanonicalSerialize, *};
 use ark_std::{
     rand::{CryptoRng, RngCore},
     string::ToString,
+    time::Instant,
     vec::Vec,
 };
 use jf_plonk::proof_system::structs::VerifyingKey;
@@ -98,8 +99,15 @@ impl<'a> DPCWitness<'a> {
         // derive utxo circuit witness
         let utxo_witness =
             DPCUtxoWitness::new_unchecked(rng, entire_inputs, entire_outputs, blinding_local_data);
+
+        let now = Instant::now();
         // derive outer circuit witness
         let batch_proof = predicates::prove(rng, output_birth_predicates, input_death_predicates)?;
+        ark_std::println!(
+            "⏱️ all {} predicate proofs gen takes: {} ms",
+            output_birth_predicates.len() + input_death_predicates.len(),
+            now.elapsed().as_millis()
+        );
 
         // TODO: remove clone
         let input_death_vks: Vec<VerifyingKey<InnerPairingEngine>> = input_death_predicates
@@ -250,6 +258,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     witness: &DPCWitness,
     public_inputs: &DPCPublicInput,
 ) -> Result<DPCValidityProof, DPCApiError> {
+    let now = Instant::now();
     // compute inner UTXO proof
     let utxo_proof = super::utxo::prove_utxo(
         rng,
@@ -257,6 +266,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
         &witness.utxo_witness,
         &public_inputs.utxo_public_input,
     )?;
+    ark_std::println!("⏱️️ UTXO proof gen takes: {} ms", now.elapsed().as_millis());
 
     // compute outer proof
     let params = PoliciesVfyParams {
@@ -273,6 +283,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
         partial_plonk_proof: public_inputs.inner_partial_vfy_proof,
     };
 
+    let now = Instant::now();
     let policies_vfy_proof = super::policies_vfy::prove(
         rng,
         &proving_key.policies_vfy_proving_key,
@@ -281,6 +292,7 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
         &pub_input,
         None,
     )?;
+    ark_std::println!("⏱️ Outer proof gen takes: {} ms", now.elapsed().as_millis());
 
     Ok(DPCValidityProof {
         utxo_proof,

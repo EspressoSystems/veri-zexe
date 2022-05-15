@@ -12,11 +12,13 @@ use crate::{
     transaction::DPCTxnBody,
     types::{InnerScalarField, InnerUniversalParam, OuterUniversalParam},
 };
+use ark_serialize::*;
 use ark_std::{end_timer, println, rand::Rng, start_timer, vec, UniformRand, Zero};
 use jf_utils::Vec;
 use std::time::Instant;
 
 #[test]
+#[ignore]
 fn dpc_bench() -> Result<(), DPCApiError> {
     let rng = &mut ark_std::test_rng();
     // NOTE: for predicate circuit of size 2^15, SRS degree for inner and outer are:
@@ -55,7 +57,7 @@ fn zcash_transaction_full_cycle(
     num_inputs: usize,
 ) -> Result<(), DPCApiError> {
     let rng = &mut ark_std::test_rng();
-    println!("ℹ️ num of inputs/outputs: {}", num_inputs);
+    println!("\nℹ️ num of inputs/outputs: {}", num_inputs);
 
     let start = start_timer!(|| "DPC::Setup::circuit-specific");
     let now = Instant::now();
@@ -163,6 +165,17 @@ fn zcash_transaction_full_cycle(
     )?;
 
     let txn_note = txn_body.authorize(&aggregate_auth_key)?;
+    {
+        let mut note_bytes = vec![];
+        txn_note.serialize(&mut note_bytes)?;
+        let mut proof_bytes = vec![];
+        txn_note.body.proof.serialize(&mut proof_bytes)?;
+        println!(
+            "ℹ️ txn_note size: {} bytes; txn proof size: {} bytes",
+            note_bytes.len(),
+            proof_bytes.len()
+        );
+    }
 
     println!("⏱️ DPC::Execute takes {} ms", now.elapsed().as_millis());
     end_timer!(execute_start);
