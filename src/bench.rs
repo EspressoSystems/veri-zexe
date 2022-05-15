@@ -36,14 +36,13 @@ fn dpc_bench() -> Result<(), DPCApiError> {
     let inner_srs = crate::proofs::universal_setup_inner(max_inner_degree, rng)?;
     let outer_srs = crate::proofs::universal_setup_outer(max_outer_degree, rng)?;
 
-    // 2-input-2-output (including fee and fee change then: 3-in-3-out)
-    let num_non_fee_inputs = 2;
-    let num_input = num_non_fee_inputs + 1;
+    // 2-input-2-output
+    let num_inputs = 2;
 
-    println!("ℹ️ num of inputs/outputs: {}", num_input);
+    println!("ℹ️ num of inputs/outputs: {}", num_inputs);
 
     let (dpc_pk, dpc_vk, mut birth_predicate, birth_pid, mut death_predicate, death_pid) =
-        ZcashPredicate::preprocess(&inner_srs, &outer_srs, num_input)?;
+        ZcashPredicate::preprocess(&inner_srs, &outer_srs, num_inputs)?;
 
     println!(
         "ℹ️ birth predicate size: {}; death predicate size: {}",
@@ -70,14 +69,9 @@ fn dpc_bench() -> Result<(), DPCApiError> {
     // =================================
     // setup transaction parameters
     // we have four types of records:
-    // - native token transaction fee note
-    // - native token transaction fee change note
     // - Zcash input notes
     // - Zcash output notes
     // =================================
-    let fee_in = 300;
-    let fee = 5;
-    let fee_out = 295;
     let input_note_values = [18, 32];
     let output_note_values = [9, 41];
 
@@ -85,8 +79,6 @@ fn dpc_bench() -> Result<(), DPCApiError> {
         rng,
         &addr,
         &pgk,
-        fee_in,
-        fee_out,
         NON_NATIVE_ASSET_ID,
         &input_note_values,
         &output_note_values,
@@ -127,9 +119,10 @@ fn dpc_bench() -> Result<(), DPCApiError> {
         false,
     )?;
 
-    let input_death_predicates = vec![death_predicate.0; num_non_fee_inputs];
-    let output_birth_predicates = vec![birth_predicate.0; num_non_fee_inputs];
+    let input_death_predicates = vec![death_predicate.0; num_inputs];
+    let output_birth_predicates = vec![birth_predicate.0; num_inputs];
 
+    ark_std::println!("Generating DPC txn body");
     let txn_body = DPCTxnBody::generate(
         rng,
         &dpc_pk,
@@ -137,15 +130,14 @@ fn dpc_bench() -> Result<(), DPCApiError> {
         entire_output_records,
         &input_death_predicates,
         &output_birth_predicates,
-        fee,
         dummy_memo.to_vec(),
         blinding_local_data,
     )?;
 
     let txn_note = {
         // TODO: move this earlier to avoid cloning entire_input_notes
-        let auth_keys = vec![ak.0; num_input];
-        let randomizers = vec![Default::default(); num_input];
+        let auth_keys = vec![ak.0; num_inputs];
+        let randomizers = vec![Default::default(); num_inputs];
         let aggregate_auth_key =
             aggregate_authorization_signing_keypairs(&auth_keys, &randomizers)?;
         txn_body.authorize(&aggregate_auth_key)?

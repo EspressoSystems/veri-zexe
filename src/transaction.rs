@@ -79,14 +79,13 @@ impl DPCTxnNote {
 #[tagged_blob("DPC_NOTE_BODY")]
 #[derive(Clone, Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct DPCTxnBody {
-    /// Input nullifiers, not including fee input
+    /// Input nullifiers
     pub input_nullifiers: Vec<Nullifier>,
-    /// Output record commitment, not including fee change output
+    /// Output record commitment
     pub output_commitments: Vec<CommitmentValue>,
     /// Arbitrary note memo data
     pub memo: Vec<InnerScalarField>,
-    /// Auxiliary information such as valid Merkle root, fee information (value,
-    /// input, change outpout)
+    /// Auxiliary information such as valid Merkle root,
     pub aux_info: DPCNoteAuxInfo,
     /// Commitment to input and output predicates
     pub(crate) predicates_commitment: CommitmentValue,
@@ -97,24 +96,18 @@ pub struct DPCTxnBody {
 }
 
 /// Auxiliary information associated with a transaction note, such as merkle
-/// root and fee
+/// root
 #[tagged_blob("DPC_NOTE_AUX_INFO")]
 #[derive(Clone, Default, Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct DPCNoteAuxInfo {
     /// Accumulator state
     pub merkle_root: NodeValue,
-    /// Proposed fee in native asset type for the transfer
-    pub fee: u64,
     /// Authorization verification key
     pub auth_verification_key: SigVerKey,
 }
 
 impl DPCTxnBody {
     /// Generate a DPC transaction Body
-    ///
-    /// NOTE: `input_death_predicates` and `output_birth_predicates` exclude
-    /// that of the first input (fee) and output (fee change) since they don't
-    /// have any predicate.
     #[allow(clippy::too_many_arguments)]
     pub fn generate<'a, R: CryptoRng + RngCore>(
         rng: &mut R,
@@ -123,7 +116,6 @@ impl DPCTxnBody {
         outputs: Vec<RecordOpening>,
         input_death_predicates: &[Predicate],
         output_birth_predicates: &[Predicate],
-        fee: u64,
         memo: Vec<InnerScalarField>,
         local_data_commitment_randomness: InnerScalarField,
     ) -> Result<DPCTxnBody, DPCApiError> {
@@ -133,7 +125,6 @@ impl DPCTxnBody {
             &outputs,
             input_death_predicates,
             output_birth_predicates,
-            fee,
         )?;
 
         // assemble witness
@@ -146,7 +137,7 @@ impl DPCTxnBody {
             local_data_commitment_randomness,
         )?;
         // derive transaction public inputs
-        let pub_input = DPCPublicInput::from_witness(&witness, fee, memo, proving_key.beta_g)?;
+        let pub_input = DPCPublicInput::from_witness(&witness, memo, proving_key.beta_g)?;
 
         let proof = crate::proofs::transaction::prove(rng, proving_key, &witness, &pub_input)?;
 
@@ -156,7 +147,6 @@ impl DPCTxnBody {
             memo: pub_input.utxo_public_input.memo,
             aux_info: DPCNoteAuxInfo {
                 merkle_root: pub_input.utxo_public_input.root,
-                fee: pub_input.utxo_public_input.fee,
                 auth_verification_key: pub_input.utxo_public_input.authorization_verification_key,
             },
             predicates_commitment: pub_input.utxo_public_input.commitment_predicates,
@@ -203,7 +193,6 @@ impl DPCTxnBody {
         }
         let utxo_public_input = DPCUtxoPublicInput {
             root: self.aux_info.merkle_root,
-            fee: self.aux_info.fee,
             input_nullifiers: self.input_nullifiers.clone(),
             output_commitments: self.output_commitments.clone(),
             commitment_local_data: self.local_data_commitment,

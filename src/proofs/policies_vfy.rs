@@ -109,12 +109,12 @@ pub(crate) struct PoliciesVfyParams {
 pub fn preprocess<'a>(
     outer_srs: &'a OuterUniversalParam,
     inner_srs: &InnerUniversalParam,
-    num_input_records: usize,
+    num_inputs: usize,
     inner_policy_domain_size: usize,
 ) -> Result<(PoliciesVfyProvingKey<'a>, PoliciesVfyVerifyingKey, usize), DPCApiError> {
     let (dummy_circuit, n_constraints) = PoliciesVfyCircuit::build_for_preprocessing(
         inner_srs,
-        num_input_records,
+        num_inputs,
         inner_policy_domain_size,
     )?;
     let (proving_key, verifying_key) =
@@ -122,7 +122,7 @@ pub fn preprocess<'a>(
             |e| {
                 DPCApiError::InvalidParameters(format!(
                     "Preprocessing policy circuit of {}-inputs failed: {}",
-                    num_input_records, e
+                    num_inputs, e
                 ))
             },
         )?;
@@ -130,7 +130,7 @@ pub fn preprocess<'a>(
     Ok((
         PoliciesVfyProvingKey {
             proving_key,
-            num_input_records,
+            num_input_records: num_inputs,
         },
         verifying_key,
         n_constraints,
@@ -219,29 +219,34 @@ impl PoliciesVfyWitness {
     /// Create a dummy witness for a transaction with `num_input` input records
     /// where each inner record policy circuit has domain size
     /// `inner_policy_domain_size`
-    pub(crate) fn dummy(num_input: usize, inner_policy_domain_size: usize) -> Self {
+    pub(crate) fn dummy(num_inputs: usize, inner_policy_domain_size: usize) -> Self {
+        // the underlying relation of `VerifyingKey` only has 1 public input: cm_ldata
+        let num_public_inputs = 1;
         Self {
             input_death_vks: vec![
                 VerifyingKey::<InnerPairingEngine>::dummy(
-                    1,
+                    num_public_inputs,
                     inner_policy_domain_size
                 );
-                num_input
+                num_inputs
             ],
             output_birth_vks: vec![
                 VerifyingKey::<InnerPairingEngine>::dummy(
-                    1,
+                    num_public_inputs,
                     inner_policy_domain_size
                 );
-                num_input
+                num_inputs
             ],
-            batch_proof: BatchProof::<InnerPairingEngine>::dummy(num_input),
+            batch_proof: BatchProof::<InnerPairingEngine>::dummy(num_inputs),
             blind_comm_predicates: InnerScalarField::zero(),
             blind_partial_proof: InnerScalarField::zero(),
         }
     }
 
     /// Create a witness
+    ///
+    /// - `blind_partial_proof`: the masking randomness to hide the partial
+    ///   proof (2 G1 points used in KZG10 to be pairing-checked)
     pub(crate) fn new(
         input_death_vks: Vec<VerifyingKey<InnerPairingEngine>>,
         output_birth_vks: Vec<VerifyingKey<InnerPairingEngine>>,

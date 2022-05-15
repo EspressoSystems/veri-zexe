@@ -15,8 +15,8 @@ use crate::{
     predicates::PredicateTrait,
     proofs::predicates::Predicate,
     structs::{NoteInput, PolicyIdentifier, RecordOpening},
+    types::NodeValue,
 };
-use ark_ff::Zero;
 use ark_std::{format, string::ToString};
 use jf_primitives::merkle_tree::AccMemberWitness;
 
@@ -25,7 +25,6 @@ pub(crate) fn txn_parameter_sanity_check(
     outputs: &[RecordOpening],
     input_death_predicates: &[Predicate],
     output_birth_predicates: &[Predicate],
-    fee: u64,
 ) -> Result<(), DPCApiError> {
     if inputs.is_empty() {
         return Err(DPCApiError::InvalidParameter(
@@ -38,7 +37,6 @@ pub(crate) fn txn_parameter_sanity_check(
         ));
     }
     check_payload_length(inputs, outputs)?;
-    check_fee(&inputs[0].ro, &outputs[0], fee)?;
     check_non_dummy_inputs_witnesses(inputs)?;
     check_predicates_consistency(
         inputs,
@@ -54,12 +52,7 @@ fn check_predicates_consistency(
     input_death_predicates: &[Predicate],
     output_birth_predicates: &[Predicate],
 ) -> Result<(), DPCApiError> {
-    for (index, (note, predicate)) in inputs
-        .iter()
-        .skip(1)
-        .zip(input_death_predicates.iter())
-        .enumerate()
-    {
+    for (index, (note, predicate)) in inputs.iter().zip(input_death_predicates.iter()).enumerate() {
         let pid = note.ro.pid_death;
         let expected_pid = PolicyIdentifier::from_verifying_key(predicate.verifying_key()).0;
         if pid != expected_pid {
@@ -72,7 +65,6 @@ fn check_predicates_consistency(
 
     for (index, (ro, predicate)) in outputs
         .iter()
-        .skip(1)
         .zip(output_birth_predicates.iter())
         .enumerate()
     {
@@ -116,90 +108,45 @@ fn check_payload_length(
     Ok(())
 }
 
-fn check_fee(
-    fee_input: &RecordOpening,
-    fee_chg_output: &RecordOpening,
-    fee: u64,
-) -> Result<(), DPCApiError> {
-    // not dummy input
-    if fee_input.payload.is_dummy {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: fee input is dummy".to_string(),
-        ));
-    }
-    // payload has dummy data except amount and asset type
-    if fee_input
-        .payload
-        .data
-        .iter()
-        .skip(2)
-        .any(|elem| !elem.is_zero())
-    {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: fee input wrong payload".to_string(),
-        ));
-    }
-    // input is of native asset type
-    if fee_input.payload.data[0] != crate::constants::NATIVE_ASSET_CODE {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: fee input is not native asset type".to_string(),
-        ));
-    }
-
-    // Check OUTPUT
-    // not dummy input
-    if fee_chg_output.payload.is_dummy {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: fee change is dummy".to_string(),
-        ));
-    }
-    // payload has dummy data except amount and asset type
-    if fee_chg_output
-        .payload
-        .data
-        .iter()
-        .skip(2)
-        .any(|elem| !elem.is_zero())
-    {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: fee change output wrong payload".to_string(),
-        ));
-    }
-    // output is of native asset type
-    if fee_chg_output.payload.data[0] != crate::constants::NATIVE_ASSET_CODE {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: fee change is not native asset type".to_string(),
-        ));
-    }
-    // check fee amount is correct
-    if fee_input.payload.data[1] - fee_chg_output.payload.data[1]
-        != crate::types::InnerScalarField::from(fee as u128)
-    {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: wrong fee".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 fn check_non_dummy_inputs_witnesses(inputs: &[NoteInput]) -> Result<(), DPCApiError> {
     let dummy_witness = AccMemberWitness::dummy(TREE_DEPTH);
+
+    // check: dummy input must have dummy membership proof;
+    // non-dummy input must have non-dummy membership proof.
     if inputs
         .iter()
         .any(|input| input.ro.payload.is_dummy ^ (input.acc_member_witness == dummy_witness))
     {
         return Err(DPCApiError::InvalidParameter("Cannot generate DPC transaction: Non dummy records cannot have dummy acc member witness, but dummy records must".to_string()));
     }
-    // assume inputs[0] already checked is non dummy (it is the fee input)
-    let root = inputs[0].acc_member_witness.root;
-    if inputs
-        .iter()
-        .any(|input| !input.ro.payload.is_dummy && input.acc_member_witness.root != root)
-    {
-        return Err(DPCApiError::InvalidParameter(
-            "Cannot generate DPC transaction: input witnesses do not share same merkle root"
-                .to_string(),
-        ));
+
+    let root = get_root_unchecked(inputs);
+
+    // check: membership proofs of non-dummy inputs must share the same root
+    if root != dummy_witness.root {
+        if inputs
+            .iter()
+            .any(|input| !input.ro.payload.is_dummy && input.acc_member_witness.root != root)
+        {
+            return Err(DPCApiError::InvalidParameter(
+                "Cannot generate DPC transaction: input witnesses do not share same merkle root"
+                    .to_string(),
+            ));
+        }
     }
     Ok(())
+}
+
+// Retrieve the first non-dummy root if any, or return the dummy root,
+// without checking consistency of all roots are equal for `note_inputs`.
+pub(crate) fn get_root_unchecked(note_inputs: &[NoteInput]) -> NodeValue {
+    let dummy_root = AccMemberWitness::dummy(TREE_DEPTH).root;
+
+    for input in note_inputs {
+        if input.acc_member_witness.root != dummy_root {
+            return input.acc_member_witness.root;
+        }
+    }
+
+    dummy_root
 }

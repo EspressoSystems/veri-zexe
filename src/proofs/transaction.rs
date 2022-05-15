@@ -110,8 +110,7 @@ impl<'a> DPCWitness<'a> {
         let utxo_witness =
             DPCUtxoWitness::new_unchecked(rng, entire_inputs, entire_outputs, blinding_local_data);
         // derive outer circuit witness
-        let batch_proof =
-            predicates::prove(rng, output_birth_predicates, input_death_predicates).unwrap();
+        let batch_proof = predicates::prove(rng, output_birth_predicates, input_death_predicates)?;
 
         // TODO: remove clone
         let input_death_vks: Vec<VerifyingKey<InnerPairingEngine>> = input_death_predicates
@@ -130,8 +129,7 @@ impl<'a> DPCWitness<'a> {
             batch_proof,
             utxo_witness.blinding_predicates,
             blind_partial_proof,
-        )
-        .unwrap();
+        )?;
         Ok(Self {
             utxo_witness,
             policies_vfy_witness,
@@ -150,12 +148,11 @@ pub(crate) struct DPCPublicInput {
 impl DPCPublicInput {
     pub(crate) fn from_witness(
         witness: &DPCWitness,
-        fee: u64,
         memo: Vec<InnerScalarField>,
-        beta_g: InnerG1Affine,
+        beta_g: InnerG1Affine, // TODO: (alex) why is this needed?
     ) -> Result<Self, DPCApiError> {
         // derive utxo circuit public input
-        let utxo_public_input = DPCUtxoPublicInput::from_witness(&witness.utxo_witness, fee, memo)?;
+        let utxo_public_input = DPCUtxoPublicInput::from_witness(&witness.utxo_witness, memo)?;
 
         // derive outer circuit public input
         let params = PoliciesVfyParams {
@@ -205,7 +202,7 @@ impl DPCPublicInput {
 /// input:
 /// - outer circuit SRS
 /// - inner circuit SRS
-/// - number of input/output records (excluding fee input/output)
+/// - number of input/output records
 /// - unmerged inner circuit domain size
 ///
 /// output:
@@ -215,17 +212,17 @@ impl DPCPublicInput {
 pub fn preprocess<'a>(
     outer_srs: &'a OuterUniversalParam,
     inner_srs: &'a InnerUniversalParam,
-    non_fee_input_size: usize,
+    num_inputs: usize,
     unmerged_inner_policy_domain_size: usize,
 ) -> Result<(DPCProvingKey<'a>, DPCVerifyingKey, (usize, usize)), DPCApiError> {
     let (utxo_proving_key, utxo_verifying_key, utxo_n_constraints) =
-        preprocess_utxo_keys(inner_srs, non_fee_input_size)?;
+        preprocess_utxo_keys(inner_srs, num_inputs)?;
 
     let (policies_vfy_proving_key, policies_vfy_verifying_key, outer_n_constraints) =
         policies_vfy::preprocess(
             outer_srs,
             inner_srs,
-            non_fee_input_size,
+            num_inputs,
             unmerged_inner_policy_domain_size,
         )?;
 
@@ -265,7 +262,6 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     public_inputs: &DPCPublicInput,
 ) -> Result<DPCValidityProof, DPCApiError> {
     // compute inner UTXO proof
-
     let utxo_proof = super::utxo::prove_utxo(
         rng,
         &proving_key.utxo_proving_key,
@@ -367,11 +363,11 @@ mod tests {
         let outer_srs = universal_setup_outer(max_outer_degree, rng)?;
 
         // preprocessing
-        let num_source_inputs = 2;
+        let num_inputs = 2;
         let (dpc_pk, dpc_vk, (..)) = preprocess(
             &outer_srs,
             &inner_srs,
-            num_source_inputs,
+            num_inputs,
             INNER_DOMAIN_SIZE_FOR_TEST,
         )?;
         let (bad_dpc_pk, bad_dpc_vk, (..)) = preprocess(&outer_srs, &inner_srs, 1, 1)?;
@@ -389,10 +385,9 @@ mod tests {
             outputs,
             input_death_predicates,
             output_birth_predicates,
-            fee,
             memo,
             blinding_local_data,
-        ) = build_dpc_info_for_test(rng, &inner_srs, &pgk, addr, rd, num_source_inputs)?;
+        ) = build_dpc_info_for_test(rng, &inner_srs, &pgk, addr, rd, num_inputs)?;
         let witness = DPCWitness::new_unchecked(
             rng,
             inputs,
@@ -402,7 +397,7 @@ mod tests {
             blinding_local_data,
         )?;
         let pub_input =
-            DPCPublicInput::from_witness(&witness, fee, memo, inner_srs.powers_of_g_ref()[1])?;
+            DPCPublicInput::from_witness(&witness, memo, inner_srs.powers_of_g_ref()[1])?;
         let dpc_proof = prove(rng, &dpc_pk, &witness, &pub_input)?;
 
         // good path
@@ -440,11 +435,6 @@ mod tests {
             // wrong predicates commitment
             let mut bad_pub_input = pub_input.clone();
             bad_pub_input.utxo_public_input.commitment_predicates = CommitmentValue::default();
-            assert!(verify(&dpc_proof, &dpc_vk, &bad_pub_input).is_err());
-
-            // wrong fee
-            let mut bad_pub_input = pub_input.clone();
-            bad_pub_input.utxo_public_input.fee = 100;
             assert!(verify(&dpc_proof, &dpc_vk, &bad_pub_input).is_err());
 
             // wrong nullifier
@@ -501,14 +491,13 @@ mod tests {
         pgk: &'b ProofGenerationKey,
         addr: DiversifiedAddress,
         rd: DiversifierRandomizer,
-        num_source_inputs: usize,
+        num_inputs: usize,
     ) -> Result<
         (
             Vec<NoteInput<'b>>,
             Vec<RecordOpening>,
             Vec<Predicate<'a>>,
             Vec<Predicate<'a>>,
-            u64,
             Vec<InnerScalarField>,
             InnerScalarField,
         ),
@@ -518,8 +507,7 @@ mod tests {
         //
         // create the inner predicate circuit with dummy public input
         let dummy_comm_local_data = InnerScalarField::zero();
-        let dummy_compressed_local_data =
-            vec![InnerScalarField::zero(); 2 * (num_source_inputs + 1) + MEMO_LEN];
+        let dummy_compressed_local_data = vec![InnerScalarField::zero(); 2 * num_inputs + MEMO_LEN];
         let dummy_blinding_local_data = InnerScalarField::zero();
         let inner_pred_cs = build_inner_predicate_circuit_for_test(
             &dummy_compressed_local_data[..],
@@ -536,30 +524,9 @@ mod tests {
         // initialize the simulated merkle tree
         let mut merkle_tree = MerkleTree::new(TREE_DEPTH).unwrap();
 
-        // prepare fee-related info
-        let fee = 5;
-        let fee_change = 1;
-        let fee_ro = RecordOpening::new_native_asset(
-            rng,
-            addr.clone(),
-            fee + fee_change,
-            0,
-            Nullifier::default(),
-        );
-        let fee_rc = fee_ro.derive_record_commitment()?;
-        merkle_tree.push(fee_rc);
-        let fee_nullifier = fee_ro.nullify(&pgk.nk)?;
-        let fee_chg_ro = RecordOpening::new_native_asset(
-            rng,
-            addr.clone(),
-            fee_change,
-            0,
-            fee_nullifier.clone(),
-        );
-
         // prepare transaction inputs notes
-        let mut input_ros = vec![fee_ro];
-        for i in 1..num_source_inputs {
+        let mut input_ros = vec![];
+        for i in 0..num_inputs - 1 {
             // death predicate identifier should match the inner predicate generated before.
             let ro = RecordOpening::new(
                 rng,
@@ -573,6 +540,9 @@ mod tests {
             merkle_tree.push(ro.derive_record_commitment()?);
             input_ros.push(ro);
         }
+
+        let first_nullifier = input_ros[0].nullify(&pgk.nk)?;
+
         let mut note_inputs = vec![];
         for (i, ro) in input_ros.into_iter().enumerate() {
             let (_, mt_witness) = AccMemberWitness::lookup_from_tree(&merkle_tree, i as u64)
@@ -593,8 +563,8 @@ mod tests {
         )); // add a dummy note input, the death predicate identifier should match
 
         // prepare transaction output record openings
-        let mut output_ros = vec![fee_chg_ro];
-        for i in 1..num_source_inputs {
+        let mut output_ros = vec![];
+        for i in 0..num_inputs - 1 {
             // birth predicate identifier should match the inner predicate generated before.
             output_ros.push(RecordOpening::new(
                 rng,
@@ -603,7 +573,7 @@ mod tests {
                 birth_pid.0,
                 InnerScalarField::zero(),
                 i,
-                fee_nullifier.clone(),
+                first_nullifier.clone(),
             ));
         }
         output_ros.push(RecordOpening::dummy_with_pid(
@@ -642,21 +612,20 @@ mod tests {
             .unwrap();
         birth_predicate.update_witness(inner_birth_pred_cs)?;
         death_predicate.update_witness(inner_death_pred_cs)?;
-        let input_death_predicates = vec![death_predicate; num_source_inputs];
-        let output_birth_predicates = vec![birth_predicate; num_source_inputs];
+        let input_death_predicates = vec![death_predicate; num_inputs];
+        let output_birth_predicates = vec![birth_predicate; num_inputs];
 
         // double check the length of the inputs/outputs
-        assert_eq!(note_inputs.len(), num_source_inputs + 1);
-        assert_eq!(output_ros.len(), num_source_inputs + 1);
-        assert_eq!(input_death_predicates.len(), num_source_inputs);
-        assert_eq!(output_birth_predicates.len(), num_source_inputs);
+        assert_eq!(note_inputs.len(), num_inputs);
+        assert_eq!(output_ros.len(), num_inputs);
+        assert_eq!(input_death_predicates.len(), num_inputs);
+        assert_eq!(output_birth_predicates.len(), num_inputs);
 
         Ok((
             note_inputs,
             output_ros,
             input_death_predicates,
             output_birth_predicates,
-            fee as u64,
             dummy_memo,
             blinding_local_data,
         ))

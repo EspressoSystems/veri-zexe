@@ -331,73 +331,48 @@ mod test {
         let outer_srs = universal_setup_outer(max_outer_degree, rng)?;
 
         // good path: 2 inputs
-        let fee_in = 300;
-        let fee = 5;
-        let fee_out = 295;
         let input_note_values = [10, 30];
         let output_note_values = [22, 18];
 
         assert!(test_example_transaction_helper(
             &inner_srs,
             &outer_srs,
-            fee_in,
-            fee,
-            fee_out,
             input_note_values.as_ref(),
             output_note_values.as_ref(),
         )
         .is_ok());
 
         // good path: 4 inputs
-        let fee_in = 300;
-        let fee = 5;
-        let fee_out = 295;
         let input_note_values = [10, 30, 60, 0];
         let output_note_values = [22, 33, 44, 1];
 
         assert!(test_example_transaction_helper(
             &inner_srs,
             &outer_srs,
-            fee_in,
-            fee,
-            fee_out,
             input_note_values.as_ref(),
             output_note_values.as_ref(),
         )
         .is_ok());
 
         // bad path: transaction exceed 2^13
-
-        let fee_in = 300;
-        let fee = 5;
-        let fee_out = 295;
         let input_note_values = [10, 30, 60, 8192];
         let output_note_values = [22, 33, 44, 8193];
 
         assert!(test_example_transaction_helper(
             &inner_srs,
             &outer_srs,
-            fee_in,
-            fee,
-            fee_out,
             input_note_values.as_ref(),
             output_note_values.as_ref(),
         )
         .is_err());
 
         // bad path: input sum != output sum
-        let fee_in = 300;
-        let fee = 5;
-        let fee_out = 295;
         let input_note_values = [10, 30, 60, 0];
         let output_note_values = [22, 33, 44, 81093];
 
         assert!(test_example_transaction_helper(
             &inner_srs,
             &outer_srs,
-            fee_in,
-            fee,
-            fee_out,
             input_note_values.as_ref(),
             output_note_values.as_ref(),
         )
@@ -409,19 +384,16 @@ mod test {
     fn test_example_transaction_helper(
         inner_srs: &InnerUniversalParam,
         outer_srs: &OuterUniversalParam,
-        fee_in: u64,
-        fee: u64,
-        fee_out: u64,
         input_note_values: &[u64],
         output_note_values: &[u64],
     ) -> Result<(), DPCApiError> {
-        let num_non_fee_inputs = input_note_values.len();
-        assert_eq!(num_non_fee_inputs, output_note_values.len());
+        let num_inputs = input_note_values.len();
+        assert_eq!(num_inputs, output_note_values.len());
 
         let rng = &mut test_rng();
 
         let (dpc_pk, dpc_vk, mut birth_predicate, birth_pid, mut death_predicate, death_pid) =
-            AltZcashPredicate::preprocess(&inner_srs, &outer_srs, num_non_fee_inputs + 1)?;
+            AltZcashPredicate::preprocess(&inner_srs, &outer_srs, num_inputs)?;
 
         // generate proof generation key and addresses
         let mut wsk = [0u8; 32];
@@ -433,8 +405,6 @@ mod test {
         // =================================
         // setup transaction parameters
         // we have four types of records:
-        // - native token transaction fee note
-        // - native token transaction fee change note
         // - AltZcash input notes
         // - AltZcash output notes
         // =================================
@@ -442,8 +412,6 @@ mod test {
             rng,
             &addr,
             &pgk,
-            fee_in,
-            fee_out,
             NON_NATIVE_ASSET_ID,
             &input_note_values,
             &output_note_values,
@@ -487,8 +455,8 @@ mod test {
             false,
         )?;
 
-        let input_death_predicates = vec![death_predicate.0; num_non_fee_inputs];
-        let output_birth_predicates = vec![birth_predicate.0; num_non_fee_inputs];
+        let input_death_predicates = vec![death_predicate.0; num_inputs];
+        let output_birth_predicates = vec![birth_predicate.0; num_inputs];
 
         let witness = DPCWitness::new_unchecked(
             rng,
@@ -501,7 +469,6 @@ mod test {
 
         let pub_input = DPCPublicInput::from_witness(
             &witness,
-            fee as u64,
             dummy_memo.to_vec(),
             inner_srs.powers_of_g_ref()[1],
         )?;

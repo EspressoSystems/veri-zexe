@@ -44,10 +44,10 @@ impl PoliciesVfyCircuit {
     /// verifying key.
     pub(crate) fn build_for_preprocessing(
         srs: &InnerUniversalParam,
-        num_input: usize,
+        num_inputs: usize,
         inner_policy_domain_size: usize,
     ) -> Result<(Self, usize), DPCApiError> {
-        let dummy_witness = PoliciesVfyWitness::dummy(num_input, inner_policy_domain_size);
+        let dummy_witness = PoliciesVfyWitness::dummy(num_inputs, inner_policy_domain_size);
         let comm_local_data = InnerScalarField::zero();
         let params = PoliciesVfyParams {
             beta_g: srs.powers_of_g_ref()[1],
