@@ -195,6 +195,17 @@ pub(super) fn prove_utxo<R: RngCore + CryptoRng>(
     let utxo_circuit =
         DPCUtxoCircuit::build(witness, public_inputs).map_err(DPCApiError::FailedSnark)?;
 
+    #[cfg(test)]
+    {
+        assert!(
+            utxo_circuit
+                .0
+                .check_circuit_satisfiability(&public_inputs.to_scalars())
+                .is_ok(),
+            "UTXO circuit is not SAT!"
+        );
+    }
+
     PlonkKzgSnark::prove::<_, _, StandardTranscript>(rng, &utxo_circuit.0, proving_key, None)
         .map_err(DPCApiError::FailedSnark)
 }
