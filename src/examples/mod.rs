@@ -74,22 +74,22 @@ where
         )?;
 
         // 2. all asset_ids match; asset_id is encoded in the first byte of payload
-        let asset_id = entire_input_notes_vars[1].record_opening_var.payload.data[0];
-        for note in entire_input_notes_vars.iter().skip(2) {
+        let asset_id = entire_input_notes_vars[0].record_opening_var.payload.data[0];
+        for note in entire_input_notes_vars.iter().skip(1) {
             birth_circuit.equal_gate(asset_id, note.record_opening_var.payload.data[0])?;
         }
-        for record in entire_outputs_vars.iter().skip(1) {
+        for record in entire_outputs_vars.iter() {
             birth_circuit.equal_gate(asset_id, record.payload.data[0])?;
         }
 
         // 3. sum inputs = sum outputs
-        let mut sum_input_var = entire_input_notes_vars[1].record_opening_var.payload.data[1];
-        for note in entire_input_notes_vars.iter().skip(2) {
+        let mut sum_input_var = entire_input_notes_vars[0].record_opening_var.payload.data[1];
+        for note in entire_input_notes_vars.iter().skip(1) {
             sum_input_var =
                 birth_circuit.add(sum_input_var, note.record_opening_var.payload.data[1])?;
         }
-        let mut sum_output_var = entire_outputs_vars[1].payload.data[1];
-        for record in entire_outputs_vars.iter().skip(2) {
+        let mut sum_output_var = entire_outputs_vars[0].payload.data[1];
+        for record in entire_outputs_vars.iter().skip(1) {
             sum_output_var = birth_circuit.add(sum_output_var, record.payload.data[1])?;
         }
         birth_circuit.equal_gate(sum_input_var, sum_output_var)?;
@@ -294,35 +294,14 @@ pub(crate) mod tests {
         rng: &mut R,
         addr: &DiversifiedAddress,
         pgk: &ProofGenerationKey,
-        fee_in: u64,
-        fee_out: u64,
         asset_id: u64,
         input_values: &[u64],
         output_values: &[u64],
         birth_pid: PolicyIdentifier,
         death_pid: PolicyIdentifier,
     ) -> Result<(Vec<RecordOpening>, Vec<RecordOpening>), DPCApiError> {
-        // fee in record
-        let fee_in_ro = RecordOpening::new_native_asset(
-            rng,
-            addr.clone(),
-            fee_in as u128,
-            0,
-            Nullifier::default(),
-        );
-        let fee_nullifier = fee_in_ro.nullify(&pgk.nk)?;
-
-        // fee out record
-        let fee_out_ro = RecordOpening::new_native_asset(
-            rng,
-            addr.clone(),
-            fee_out as u128,
-            0,
-            fee_nullifier.clone(),
-        );
-
         // input records
-        let mut inputs = vec![fee_in_ro];
+        let mut inputs = vec![];
         for (i, &value) in input_values.iter().enumerate() {
             let input_payload = Payload::from_scalars(&[
                 InnerScalarField::from(asset_id),
@@ -335,15 +314,16 @@ pub(crate) mod tests {
                 input_payload,
                 InnerScalarField::zero(),
                 death_pid.0,
-                i + 1,
+                i,
                 Nullifier::default(),
             );
 
             inputs.push(input_ro);
         }
+        let first_nf = inputs[0].nullify(&pgk.nk)?;
 
         // output records
-        let mut outputs = vec![fee_out_ro];
+        let mut outputs = vec![];
         for (i, &value) in output_values.iter().enumerate() {
             let input_payload = Payload::from_scalars(&[
                 InnerScalarField::from(asset_id),
@@ -356,8 +336,8 @@ pub(crate) mod tests {
                 input_payload,
                 birth_pid.0,
                 InnerScalarField::zero(),
-                i + 1,
-                fee_nullifier.clone(),
+                i,
+                first_nf.clone(),
             );
 
             outputs.push(output_ro);

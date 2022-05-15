@@ -81,7 +81,7 @@ impl RecordOpening {
         pid_birth: InnerScalarField,
         pid_death: InnerScalarField,
         position_in_note: usize,
-        note_first_nullifier: Nullifier,
+        note_first_nullifier: Nullifier, // TODO: (alex) this is probably a bad API design
     ) -> RecordOpening {
         let blinding = InnerScalarField::rand(rng);
         let hash = jf_rescue::Permutation::default();
@@ -528,7 +528,7 @@ pub(crate) fn derive_predicates_commitment(
         .map_err(DPCApiError::FailedPrimitives)
 }
 
-// this function compresses the entire local data (including fees).
+// this function compresses the entire local data
 pub(crate) fn compress_local_data(
     entire_note_inputs: &[NoteInput],
     entire_output_ros: &[RecordOpening],

@@ -24,15 +24,13 @@
 //!     - policy id for death predicate
 //!
 //! * build the notes and records for transaction
-//!     - a valid fee note (valid = exist in merkle tree)
 //!     - a list of valid input notes (valid = exist in merkle tree)
-//!     - a fee change record
 //!     - a list of output records
 //! and build corresponding witnesses for this transaction
 //!
 //! * generate a dpc proof that consists of three components
-//!     - an UTXO proof proves that both fee note and input notes are valid
-//!       w.r.t. the given merkle root
+//!     - an UTXO proof proves that input notes are valid w.r.t. the given
+//!       merkle root
 //!     - a birth/death predicates proof that proves both predicates are
 //!       satisfied w.r.t. the public/private inputs
 //!     - a policies verification proof that proves the knowledge of predicates
@@ -167,7 +165,7 @@ impl<'a> PredicateOps<'a> for ZcashPredicate<'a> {
     /// - rng
     /// - inner SRS
     /// - outer SRS
-    /// - total number of inputs (including fee record)
+    /// - total number of inputs
     ///
     /// Outputs:
     /// - DPC proving key
@@ -213,7 +211,7 @@ impl<'a> PredicateOps<'a> for ZcashPredicate<'a> {
         let (dpc_pk, dpc_vk, (..)) = crate::proofs::transaction::preprocess(
             outer_srs,
             inner_srs,
-            entire_input_size - 1,
+            entire_input_size,
             unmerged_inner_domain_size,
         )?;
         Ok((
@@ -301,7 +299,7 @@ mod test {
     const NON_NATIVE_ASSET_ID: u64 = 2u64;
 
     #[test]
-    #[ignore]
+    // #[ignore]
     fn test_zcash_example_transaction() -> Result<(), DPCApiError> {
         // universal setup
         let rng = &mut test_rng();
@@ -311,52 +309,34 @@ mod test {
         let outer_srs = universal_setup_outer(max_outer_degree, rng)?;
 
         // good path: 2 inputs
-        let fee_in = 300;
-        let fee = 5;
-        let fee_out = 295;
         let input_note_values = [10, 30];
         let output_note_values = [22, 18];
 
         test_example_transaction_helper(
             &inner_srs,
             &outer_srs,
-            fee_in,
-            fee,
-            fee_out,
             input_note_values.as_ref(),
             output_note_values.as_ref(),
         )?;
 
         // good path: 4 inputs
-        let fee_in = 300;
-        let fee = 5;
-        let fee_out = 295;
         let input_note_values = [10, 30, 60, 0];
         let output_note_values = [22, 33, 44, 1];
 
         test_example_transaction_helper(
             &inner_srs,
             &outer_srs,
-            fee_in,
-            fee,
-            fee_out,
             input_note_values.as_ref(),
             output_note_values.as_ref(),
         )?;
 
         // bad path: input sum != output sum
-        let fee_in = 300;
-        let fee = 5;
-        let fee_out = 295;
         let input_note_values = [10, 30, 60, 0];
         let output_note_values = [22, 33, 44, 81093];
 
         assert!(test_example_transaction_helper(
             &inner_srs,
             &outer_srs,
-            fee_in,
-            fee,
-            fee_out,
             input_note_values.as_ref(),
             output_note_values.as_ref(),
         )
@@ -368,19 +348,16 @@ mod test {
     fn test_example_transaction_helper(
         inner_srs: &InnerUniversalParam,
         outer_srs: &OuterUniversalParam,
-        fee_in: u64,
-        fee: u64,
-        fee_out: u64,
         input_note_values: &[u64],
         output_note_values: &[u64],
     ) -> Result<(), DPCApiError> {
-        let num_non_fee_inputs = input_note_values.len();
-        assert_eq!(num_non_fee_inputs, output_note_values.len());
+        let num_inputs = input_note_values.len();
+        assert_eq!(num_inputs, output_note_values.len());
 
         let rng = &mut test_rng();
 
         let (dpc_pk, dpc_vk, mut birth_predicate, birth_pid, mut death_predicate, death_pid) =
-            ZcashPredicate::preprocess(&inner_srs, &outer_srs, num_non_fee_inputs + 1)?;
+            ZcashPredicate::preprocess(&inner_srs, &outer_srs, num_inputs)?;
 
         // generate proof generation key and addresses
         let mut wsk = [0u8; 32];
@@ -392,8 +369,6 @@ mod test {
         // =================================
         // setup transaction parameters
         // we have four types of records:
-        // - native token transaction fee note
-        // - native token transaction fee change note
         // - Zcash input notes
         // - Zcash output notes
         // =================================
@@ -401,8 +376,6 @@ mod test {
             rng,
             &addr,
             &pgk,
-            fee_in,
-            fee_out,
             NON_NATIVE_ASSET_ID,
             &input_note_values,
             &output_note_values,
@@ -446,8 +419,8 @@ mod test {
             false,
         )?;
 
-        let input_death_predicates = vec![death_predicate.0; num_non_fee_inputs];
-        let output_birth_predicates = vec![birth_predicate.0; num_non_fee_inputs];
+        let input_death_predicates = vec![death_predicate.0; num_inputs];
+        let output_birth_predicates = vec![birth_predicate.0; num_inputs];
 
         let witness = DPCWitness::new_unchecked(
             rng,
@@ -460,7 +433,6 @@ mod test {
 
         let pub_input = DPCPublicInput::from_witness(
             &witness,
-            fee as u64,
             dummy_memo.to_vec(),
             inner_srs.powers_of_g_ref()[1],
         )?;

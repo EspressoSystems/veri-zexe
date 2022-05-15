@@ -10,6 +10,7 @@ use crate::{
         CommitmentValue, InnerPairingEngine, InnerScalarField, InnerUniversalParam, NodeValue,
         SigVerKey,
     },
+    utils,
 };
 use ark_ff::UniformRand;
 use ark_std::{
@@ -37,9 +38,9 @@ pub(super) type ProofUtxo =
 
 #[derive(Clone, Debug)]
 pub struct DPCUtxoWitness<'a> {
-    // input notes, including the fee note
+    // input notes
     pub(crate) entire_inputs: Vec<NoteInput<'a>>,
-    // output records, including the fee change record
+    // output records
     pub(crate) entire_output_records_openings: Vec<RecordOpening>,
     // the blinder for the local data commitment
     pub(crate) blinding_local_data: InnerScalarField,
@@ -48,11 +49,8 @@ pub struct DPCUtxoWitness<'a> {
 }
 
 impl<'a> DPCUtxoWitness<'a> {
-    /// Build a dummy witness for `non_fee_input_size` number of non-fee
-    /// notes/records. The actual number of notes/records will be
-    /// `non_fee_input_size + 1` where `1` comes from the fees.
-    pub(crate) fn dummy(non_fee_input_size: usize, pgk: &'a ProofGenerationKey) -> Self {
-        let n_inputs = non_fee_input_size + 1;
+    /// Build a dummy witness for `n_inputs` number of notes/records.
+    pub(crate) fn dummy(n_inputs: usize, pgk: &'a ProofGenerationKey) -> Self {
         let outputs = vec![RecordOpening::default(); n_inputs];
         let rng = &mut ark_std::test_rng();
         let mut inputs = vec![];
@@ -70,18 +68,19 @@ impl<'a> DPCUtxoWitness<'a> {
     }
 
     /// built an UTXO witness from all the inputs/records,
-    /// including fee related ones.
     pub(crate) fn new_unchecked<R: CryptoRng + RngCore>(
         rng: &mut R,
         entire_inputs: Vec<NoteInput<'a>>,
-        entire_outputs: Vec<RecordOpening>,
+        entire_output_records_openings: Vec<RecordOpening>,
         blinding_local_data: InnerScalarField,
     ) -> Self {
+        // TODO: (alex) why is one randomness being passed in, while another generated
+        // here?
         let blinding_predicates = InnerScalarField::rand(rng);
 
         DPCUtxoWitness {
             entire_inputs,
-            entire_output_records_openings: entire_outputs,
+            entire_output_records_openings,
             blinding_local_data,
             blinding_predicates,
         }
@@ -91,7 +90,6 @@ impl<'a> DPCUtxoWitness<'a> {
 #[derive(Clone, Debug)]
 pub(crate) struct DPCUtxoPublicInput {
     pub(crate) root: NodeValue,
-    pub(crate) fee: u64,
     pub(crate) input_nullifiers: Vec<Nullifier>,
     pub(crate) output_commitments: Vec<CommitmentValue>,
     pub(crate) commitment_local_data: CommitmentValue,
@@ -103,7 +101,6 @@ pub(crate) struct DPCUtxoPublicInput {
 impl DPCUtxoPublicInput {
     pub(crate) fn from_witness(
         witness: &DPCUtxoWitness,
-        fee: u64,
         memo: Vec<InnerScalarField>,
     ) -> Result<Self, DPCApiError> {
         // 1. aggregate verification key
@@ -125,19 +122,17 @@ impl DPCUtxoPublicInput {
         // TODO compute detection keys
 
         // retrieve merkle root
-        let root = witness.entire_inputs[0].acc_member_witness.root;
+        let root = utils::get_root_unchecked(&witness.entire_inputs);
 
-        // Compute commitment to predicates, ignore fee input/output
+        // Compute commitment to predicates
         let input_death_pids: Vec<InnerScalarField> = witness
             .entire_inputs
             .iter()
-            .skip(1)
             .map(|note| note.ro.pid_death)
             .collect();
         let output_birth_pids: Vec<InnerScalarField> = witness
             .entire_output_records_openings
             .iter()
-            .skip(1)
             .map(|ro| ro.pid_birth)
             .collect();
         let commitment_predicates = derive_predicates_commitment(
@@ -161,7 +156,6 @@ impl DPCUtxoPublicInput {
 
         Ok(DPCUtxoPublicInput {
             root,
-            fee,
             input_nullifiers: nullifiers,
             output_commitments: compressed_local_data.output_record_commitments,
             commitment_local_data,
@@ -182,7 +176,6 @@ impl DPCUtxoPublicInput {
         scalars.push(self.commitment_predicates);
         scalars.push(self.commitment_local_data);
         scalars.push(self.root.to_scalar());
-        scalars.push(InnerScalarField::from(self.fee));
         self.memo
             .iter()
             .for_each(|memo_elem| scalars.push(*memo_elem));
@@ -220,12 +213,12 @@ pub(super) fn verify_utxo(
     .map_err(DPCApiError::FailedSnark)
 }
 
-// `num_non_fee_inputs` is the number of inputs that exclude the fee input.
+// `num_inputs` is the number of inputs
 pub(crate) fn preprocess_utxo_keys(
     srs: &InnerUniversalParam,
-    num_non_fee_inputs: usize,
+    num_inputs: usize,
 ) -> Result<(UtxoProvingKey, UtxoVerifyingKey, usize), DPCApiError> {
-    let dummy_circuit = DPCUtxoCircuit::build_for_preprocessing(num_non_fee_inputs)?;
+    let dummy_circuit = DPCUtxoCircuit::build_for_preprocessing(num_inputs)?;
     let (proving_key, verifying_key) =
         PlonkKzgSnark::<InnerPairingEngine>::preprocess(srs, &dummy_circuit.0)
             .map_err(DPCApiError::FailedSnark)?;
@@ -254,21 +247,20 @@ mod tests {
     #[test]
     fn test_pub_input_order_consistency() {
         let rng = &mut ark_std::test_rng();
-        let fee = 10;
         let mut seed = [0u8; 32];
         rng.fill(&mut seed);
         let mut merkle_tree = MerkleTree::new(crate::constants::TREE_DEPTH).unwrap();
         let msk = KeyChainMasterKey::generate(seed, b"my wallet");
         let (_ask, pgk, ivk) = msk.derive_key_chain_single_consumer();
-        let (addr, diversifier_fee_input) = msk.derive_diversified_address(&pgk, &ivk, 0).unwrap();
+        let (addr, diversifier_rand) = msk.derive_diversified_address(&pgk, &ivk, 0).unwrap();
 
-        let n_inputs = 4;
+        let n_inputs = 4usize;
         let mut input_ros = vec![];
-        for _ in 0..n_inputs {
+        for i in 0..n_inputs {
             let ro = RecordOpening::new_native_asset(
                 rng,
                 addr.clone(),
-                15,
+                (i as u128 + 1) * 5,
                 0,
                 Nullifier(InnerScalarField::zero()),
             );
@@ -285,7 +277,7 @@ mod tests {
                 acc_member_witness: acc_witness,
                 proof_gen_key: &pgk,
                 authorization_randomizer: Default::default(),
-                diversifier_randomizer: diversifier_fee_input.clone(),
+                diversifier_randomizer: diversifier_rand.clone(),
             });
         }
 
@@ -295,7 +287,7 @@ mod tests {
             output_ros.push(RecordOpening::new_native_asset(
                 rng,
                 addr.clone(),
-                5,
+                (4 - i as u128) * 5,
                 i,
                 first_nullifier.clone(),
             ));
@@ -303,7 +295,7 @@ mod tests {
 
         let blinding_local_data = InnerScalarField::rand(rng);
         let witness = DPCUtxoWitness::new_unchecked(rng, inputs, output_ros, blinding_local_data);
-        let public_input = DPCUtxoPublicInput::from_witness(&witness, fee, vec![]).unwrap();
+        let public_input = DPCUtxoPublicInput::from_witness(&witness, vec![]).unwrap();
         let public_input_scalars = public_input.to_scalars();
 
         let circuit = DPCUtxoCircuit::build(&witness, &public_input).unwrap();
@@ -313,10 +305,11 @@ mod tests {
 
     fn _test_utxo_proof(
         universal_params: &InnerUniversalParam,
-        n_source_inputs: usize,
+        num_inputs: usize,
     ) -> Result<(), DPCApiError> {
+        assert!(num_inputs > 0, "Need at least 1 input 1 output.");
         let (proving_key, verifying_key, _) =
-            super::preprocess_utxo_keys(&universal_params, n_source_inputs)?;
+            super::preprocess_utxo_keys(&universal_params, num_inputs)?;
 
         let mut merkle_tree = MerkleTree::new(TREE_DEPTH).unwrap();
         let mut wsk = [0u8; 32];
@@ -325,21 +318,9 @@ mod tests {
         let msk = KeyChainMasterKey::generate(wsk, &[]);
         let (_, pgk, ivk) = msk.derive_key_chain_single_consumer();
         let (addr, rd) = msk.derive_diversified_address(&pgk, &ivk, 0)?;
-        let fee = 5;
-        let fee_change = 1;
-        let fst_nullifier = Nullifier::default();
-        let fee_ro = RecordOpening::new_native_asset(
-            rng,
-            addr.clone(),
-            fee + fee_change,
-            0,
-            fst_nullifier.clone(),
-        );
-        let nullifier = fee_ro.nullify(&pgk.nk)?;
-        let rc = fee_ro.derive_record_commitment()?;
-        merkle_tree.push(rc);
-        let mut inputs = vec![fee_ro];
-        for i in 1..n_source_inputs {
+
+        let mut inputs = vec![];
+        for i in 0..num_inputs - 1 {
             let ro = RecordOpening::new(
                 rng,
                 addr.clone(),
@@ -347,15 +328,18 @@ mod tests {
                 InnerScalarField::zero(),
                 InnerScalarField::zero(),
                 i,
-                fst_nullifier.clone(),
+                Nullifier::default(),
             );
             merkle_tree.push(ro.derive_record_commitment()?);
             inputs.push(ro);
         }
 
+        // push an additional dummy input
         let dummy_ro = RecordOpening::dummy();
         merkle_tree.push(dummy_ro.derive_record_commitment()?);
         inputs.push(dummy_ro);
+
+        let fst_nullifier = inputs[0].nullify(&pgk.nk)?;
 
         let mut note_inputs = vec![];
         for (i, ro) in inputs.into_iter().enumerate() {
@@ -373,10 +357,7 @@ mod tests {
         }
 
         let mut outputs = vec![];
-        let fee_chg_ro =
-            RecordOpening::new_native_asset(rng, addr.clone(), fee_change, 0, nullifier.clone());
-        outputs.push(fee_chg_ro);
-        for i in 1..n_source_inputs {
+        for i in 0..num_inputs - 1 {
             outputs.push(RecordOpening::new(
                 rng,
                 addr.clone(),
@@ -384,19 +365,16 @@ mod tests {
                 InnerScalarField::zero(),
                 InnerScalarField::zero(),
                 i,
-                nullifier.clone(),
+                fst_nullifier.clone(),
             ));
         }
-
+        // push an additional dummy output
         outputs.push(RecordOpening::dummy());
 
         let blinding_local_data = InnerScalarField::rand(rng);
         let witness = DPCUtxoWitness::new_unchecked(rng, note_inputs, outputs, blinding_local_data);
-        let mut pubinput = DPCUtxoPublicInput::from_witness(
-            &witness,
-            fee as u64,
-            vec![InnerScalarField::zero(); MEMO_LEN],
-        )?;
+        let mut pubinput =
+            DPCUtxoPublicInput::from_witness(&witness, vec![InnerScalarField::zero(); MEMO_LEN])?;
 
         let proof = super::prove_utxo(rng, &proving_key, &witness, &pubinput)?;
 
@@ -413,8 +391,8 @@ mod tests {
         let rng = &mut ark_std::test_rng();
         let max_degree = 32770 * 4;
         let universal_params = universal_setup_inner(max_degree, rng)?;
-        _test_utxo_proof(&universal_params, 1)?;
         _test_utxo_proof(&universal_params, 2)?;
-        _test_utxo_proof(&universal_params, 4)
+        _test_utxo_proof(&universal_params, 3)?;
+        _test_utxo_proof(&universal_params, 5)
     }
 }

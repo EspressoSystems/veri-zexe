@@ -1,6 +1,6 @@
 use crate::{
     circuit::structs::{NoteInputVar, RecordOpeningVar},
-    constants::{MEMO_LEN, NATIVE_ASSET_CODE},
+    constants::MEMO_LEN,
     errors::DPCApiError,
     keys::KeyChainMasterKey,
     proofs::utxo::{DPCUtxoPublicInput, DPCUtxoWitness},
@@ -60,7 +60,6 @@ pub(crate) struct DPCUtxoPubInputVar {
     pub(crate) predicates_commitment: Variable,
     pub(crate) local_data_commitment: Variable,
     pub(crate) root: Variable,
-    pub(crate) fee: Variable,
     pub(crate) memo: Vec<Variable>,
     pub(crate) authorization_verification_key: PointVariable,
 }
@@ -85,7 +84,6 @@ impl DPCUtxoPubInputVar {
         let local_data_commitment =
             circuit.create_public_variable(public_input.commitment_local_data)?;
         let root = circuit.create_public_variable(public_input.root.to_scalar())?;
-        let fee = circuit.create_public_variable(InnerScalarField::from(public_input.fee))?;
         let memo = public_input
             .memo
             .iter()
@@ -99,7 +97,6 @@ impl DPCUtxoPubInputVar {
             predicates_commitment,
             local_data_commitment,
             root,
-            fee,
             memo,
             authorization_verification_key,
         })
@@ -109,20 +106,18 @@ impl DPCUtxoPubInputVar {
 pub(crate) struct DPCUtxoCircuit(pub(crate) PlonkCircuit<InnerScalarField>);
 
 impl DPCUtxoCircuit {
-    /// Build a pre-processed circuit for `non_fee_input_size` number of non-fee
-    /// notes/records. The actual number of notes/records will be
-    /// `non_fee_input_size + 1` where `1` comes from the fees.
-    pub(crate) fn build_for_preprocessing(non_fee_input_size: usize) -> Result<Self, DPCApiError> {
+    /// Build a pre-processed circuit for `n_inputs` number of notes/records.
+    pub(crate) fn build_for_preprocessing(n_inputs: usize) -> Result<Self, DPCApiError> {
         let memo = vec![InnerScalarField::zero(); MEMO_LEN];
         let wallet_key = [0u8; 32];
         let msk = KeyChainMasterKey::generate(wallet_key, &[]);
         let (_, pgk, _) = msk.derive_key_chain_single_consumer();
-        let dummy_witness = DPCUtxoWitness::dummy(non_fee_input_size, &pgk);
-        let pub_input = DPCUtxoPublicInput::from_witness(&dummy_witness, 0, memo)?;
+        let dummy_witness = DPCUtxoWitness::dummy(n_inputs, &pgk);
+        let pub_input = DPCUtxoPublicInput::from_witness(&dummy_witness, memo)?;
         Self::build(&dummy_witness, &pub_input)
         .map_err(|_| DPCApiError::InternalError(format!(
-                "Utxo Circuit Build for preprocessing unexpected error: Please report bug. Number of source inputs {}", 
-                non_fee_input_size
+                "Utxo Circuit Build for preprocessing unexpected error: Please report bug. Number of inputs {}",
+                n_inputs
             )))
     }
 
@@ -136,23 +131,15 @@ impl DPCUtxoCircuit {
 
         let mut compressed_local_data = vec![];
         let mut derived_authorization_key = circuit.neutral_point_variable();
-        let native_asset_type_var = circuit.create_constant_variable(NATIVE_ASSET_CODE)?;
-        let mut is_fee_ro = true;
+
         // check input
         for (input, input_nullifier) in witness_var
             .inputs
             .iter()
             .zip(public_input_var.nullifiers.iter())
         {
-            let (record_commitment, rand_auth_key) = Self::prove_spend(
-                &mut circuit,
-                input,
-                *input_nullifier,
-                public_input_var.root,
-                is_fee_ro,
-                native_asset_type_var,
-            )?;
-            is_fee_ro = false;
+            let (record_commitment, rand_auth_key) =
+                Self::prove_spend(&mut circuit, input, *input_nullifier, public_input_var.root)?;
 
             // update local data
             compressed_local_data.push(record_commitment);
@@ -168,7 +155,6 @@ impl DPCUtxoCircuit {
         )?;
 
         // check output
-        let mut is_fee_chg_ro = true;
         for (i, (output_ro, output_rc)) in witness_var
             .output_records_openings
             .iter()
@@ -179,24 +165,11 @@ impl DPCUtxoCircuit {
                 &mut circuit,
                 output_ro,
                 *output_rc,
-                is_fee_chg_ro,
-                native_asset_type_var,
                 i,
                 public_input_var.nullifiers[0],
             )?;
-            is_fee_chg_ro = false;
             // update local data
             compressed_local_data.push(*output_rc);
-        }
-
-        // check fee amount
-        {
-            // 2. check if matched diff between input fee and fee_chg
-            let diff = circuit.sub(
-                witness_var.inputs[0].record_opening_var.payload.data[1],
-                witness_var.output_records_openings[0].payload.data[1],
-            )?;
-            circuit.equal_gate(diff, public_input_var.fee)?;
         }
 
         // check compressed local data commitment
@@ -210,18 +183,16 @@ impl DPCUtxoCircuit {
             circuit.equal_gate(derived_ldata_com, public_input_var.local_data_commitment)?;
         }
 
-        // check commitment predicates, ignore fee input/output
+        // check commitment predicates
         {
             let mut pids: Vec<_> = witness_var
                 .inputs
                 .iter()
-                .skip(1)
                 .map(|input| input.record_opening_var.pid_death)
                 .collect();
             let output_pid_birth: Vec<_> = witness_var
                 .output_records_openings
                 .iter()
-                .skip(1)
                 .map(|ro| ro.pid_birth)
                 .collect();
             pids.extend(output_pid_birth.iter());
@@ -248,8 +219,6 @@ impl DPCUtxoCircuit {
         input: &NoteInputVar,
         public_nullifier: Variable,
         public_root: Variable,
-        is_fee_input: bool,
-        native_asset_type: Variable,
     ) -> Result<(Variable, PointVariable), PlonkError> {
         circuit.bool_gate(input.record_opening_var.payload.is_dummy)?;
         let is_dummy = input.record_opening_var.payload.is_dummy;
@@ -266,12 +235,6 @@ impl DPCUtxoCircuit {
             &input.acc_member_witness_var.merkle_path,
         )?;
 
-        // check record is dummy or commitment is accumulated
-        // but first record must be the fee input and cannot be dummy
-        if is_fee_input {
-            circuit.equal_gate(is_dummy, circuit.zero())?;
-            circuit.equal_gate(input.record_opening_var.payload.data[0], native_asset_type)?;
-        }
         let is_in_acc = circuit.check_equal(derived_root, public_root)?;
         circuit.logic_or_gate(is_dummy, is_in_acc)?;
 
@@ -303,8 +266,6 @@ impl DPCUtxoCircuit {
         circuit: &mut PlonkCircuit<InnerScalarField>,
         output: &RecordOpeningVar,
         output_rc_var: Variable,
-        is_fee_chg: bool,
-        native_asset_type: Variable,
         position_in_note: usize,
         first_nullifier: Variable,
     ) -> Result<(), PlonkError> {
@@ -320,11 +281,6 @@ impl DPCUtxoCircuit {
         let correct_rc = circuit.check_equal(derived_output_rc, output_rc_var)?;
         circuit.logic_or_gate(correct_rc, is_dummy)?;
 
-        if is_fee_chg {
-            circuit.equal_gate(output.payload.is_dummy, circuit.zero())?;
-            circuit.equal_gate(output.payload.data[0], native_asset_type)?;
-        }
-
         Ok(())
     }
 }
@@ -336,7 +292,6 @@ mod test {
             structs::{NoteInputVar, RecordOpeningVar},
             utxo::DPCUtxoCircuit,
         },
-        constants::NATIVE_ASSET_CODE,
         keys::KeyChainMasterKey,
         proofs::utxo::{DPCUtxoPublicInput, DPCUtxoWitness},
         structs::{NoteInput, Nullifier, Payload, RecordOpening},
@@ -367,37 +322,16 @@ mod test {
             nonce: InnerScalarField::rand(rng),
             blinding: InnerScalarField::rand(rng),
         };
-        do_spend_test(rng, &msk, &ro, false, true, false, &mut merkle_tree);
-        // this is not a native asset record, so it should fail if it is used for fee
-        do_spend_test(rng, &msk, &ro, false, false, true, &mut merkle_tree);
+        do_spend_test(rng, &msk, &ro, false, true, &mut merkle_tree);
         // check with bad witness for root
-        do_spend_test(rng, &msk, &ro, true, false, false, &mut merkle_tree);
+        do_spend_test(rng, &msk, &ro, true, false, &mut merkle_tree);
         // check again with bad witness but record is dummy
         ro.payload.is_dummy = true;
-        do_spend_test(rng, &msk, &ro, true, true, false, &mut merkle_tree);
-        // check fee record
-        let ro = RecordOpening::new_native_asset(
-            rng,
-            address.clone(),
-            10,
-            0,
-            Nullifier(InnerScalarField::zero()),
-        );
-        do_spend_test(rng, &msk, &ro, false, true, true, &mut merkle_tree);
-        // if fee record is dummy then fail
-        let mut ro = RecordOpening::new_native_asset(
-            rng,
-            address.clone(),
-            10,
-            0,
-            Nullifier(InnerScalarField::zero()),
-        );
-        ro.payload.is_dummy = true;
-        do_spend_test(rng, &msk, &ro, false, false, true, &mut merkle_tree);
+        do_spend_test(rng, &msk, &ro, true, true, &mut merkle_tree);
 
-        // if non fee record is dummy all should pass
+        // if record is dummy all should pass
         let ro = RecordOpening::dummy();
-        do_spend_test(rng, &msk, &ro, false, true, false, &mut merkle_tree);
+        do_spend_test(rng, &msk, &ro, false, true, &mut merkle_tree);
     }
 
     fn do_spend_test<R: CryptoRng + RngCore>(
@@ -406,7 +340,6 @@ mod test {
         ro: &RecordOpening,
         bad_root: bool,
         should_pass: bool,
-        is_fee: bool,
         merkle_tree: &mut MerkleTree<InnerScalarField>,
     ) {
         // recompute addresses and keys from msk to avoid more parameters
@@ -442,17 +375,8 @@ mod test {
         let nullifier_var = circuit.create_public_variable(nullifier.0).unwrap();
         let input_var = NoteInputVar::new(&mut circuit, &input).unwrap();
 
-        let native_asset_type_var = circuit.create_constant_variable(NATIVE_ASSET_CODE).unwrap();
-
-        let (rc_var, _randomizer_auth_key) = DPCUtxoCircuit::prove_spend(
-            &mut circuit,
-            &input_var,
-            nullifier_var,
-            root_var,
-            is_fee,
-            native_asset_type_var,
-        )
-        .unwrap();
+        let (rc_var, _randomizer_auth_key) =
+            DPCUtxoCircuit::prove_spend(&mut circuit, &input_var, nullifier_var, root_var).unwrap();
         assert_eq!(rc, circuit.witness(rc_var).unwrap());
         if should_pass {
             circuit
@@ -473,7 +397,7 @@ mod test {
         let (_ask, pgk, ivk) = msk.derive_key_chain_single_consumer();
         let (address, _diversifier) = msk.derive_diversified_address(&pgk, &ivk, 0).unwrap();
         let first_nullifier = InnerScalarField::rand(rng);
-        let position_in_note = 1;
+        let position_in_note = 0;
         // basic passing test with normal record
         let ro = RecordOpening::new(
             rng,
@@ -485,59 +409,30 @@ mod test {
             Nullifier(first_nullifier),
         );
         // successful case
-        do_test_prove_output(&ro, position_in_note, first_nullifier, false, true);
-        // fail if it should be fee
-        do_test_prove_output(&ro, position_in_note, first_nullifier, true, false);
+        do_test_prove_output(&ro, position_in_note, first_nullifier, true);
         // fail if position in note is incorrect
-        do_test_prove_output(&ro, position_in_note - 1, first_nullifier, false, false);
-        do_test_prove_output(&ro, position_in_note + 1, first_nullifier, false, false);
+        do_test_prove_output(&ro, position_in_note + 1, first_nullifier, false);
         // fail if wrong first nullifier
-        do_test_prove_output(&ro, 1, InnerScalarField::rand(rng), true, false);
-
-        // test native asset output
-        let position_in_note = 0;
-        let mut ro = RecordOpening::new_native_asset(
-            rng,
-            address.clone(),
-            10,
-            position_in_note,
-            Nullifier(first_nullifier),
-        );
-        // successful cases
-        do_test_prove_output(&ro, position_in_note, first_nullifier, false, true);
-        do_test_prove_output(&ro, position_in_note, first_nullifier, true, true);
-
-        ro.payload.data[0] = InnerScalarField::rand(rng); // not native asset for fee input should fail
-        do_test_prove_output(&ro, position_in_note, first_nullifier, true, false);
+        do_test_prove_output(&ro, position_in_note, InnerScalarField::rand(rng), false);
 
         // test dummy outputs
         let ro = RecordOpening::dummy();
-        do_test_prove_output(&ro, position_in_note, first_nullifier, false, true);
+        do_test_prove_output(&ro, position_in_note, first_nullifier, true);
     }
 
     fn do_test_prove_output(
         ro: &RecordOpening,
         position: usize,
         first_nullifier: InnerScalarField,
-        is_fee: bool,
         should_pass: bool,
     ) {
         let rc = ro.derive_record_commitment().unwrap();
         let mut circuit = PlonkCircuit::<InnerScalarField>::new_turbo_plonk();
-        let native_asset_var = circuit.create_constant_variable(NATIVE_ASSET_CODE).unwrap();
         let rc_var = circuit.create_public_variable(rc).unwrap();
         let ro_var = RecordOpeningVar::new(&mut circuit, &ro).unwrap();
         let first_nullifier_var = circuit.create_public_variable(first_nullifier).unwrap();
-        DPCUtxoCircuit::prove_output(
-            &mut circuit,
-            &ro_var,
-            rc_var,
-            is_fee,
-            native_asset_var,
-            position,
-            first_nullifier_var,
-        )
-        .unwrap();
+        DPCUtxoCircuit::prove_output(&mut circuit, &ro_var, rc_var, position, first_nullifier_var)
+            .unwrap();
         if should_pass {
             circuit
                 .check_circuit_satisfiability(&[rc, first_nullifier])
@@ -552,26 +447,15 @@ mod test {
     #[test]
     fn test_circuit_build() {
         let rng = &mut ark_std::test_rng();
-        let fee = 10;
         let mut seed = [0u8; 32];
         rng.fill(&mut seed);
         let mut merkle_tree = MerkleTree::new(crate::constants::TREE_DEPTH).unwrap();
         let msk = KeyChainMasterKey::generate(seed, b"my wallet");
         let (_ask, pgk, ivk) = msk.derive_key_chain_single_consumer();
-        let (addr_fee_input, diversifier_fee_input) =
-            msk.derive_diversified_address(&pgk, &ivk, 0).unwrap();
         let (addr_source, diversifier_source) =
-            msk.derive_diversified_address(&pgk, &ivk, 1).unwrap();
-        let (addr_dest, _) = msk.derive_diversified_address(&pgk, &ivk, 2).unwrap();
+            msk.derive_diversified_address(&pgk, &ivk, 0).unwrap();
+        let (addr_dest, _) = msk.derive_diversified_address(&pgk, &ivk, 1).unwrap();
 
-        let ro_fee = RecordOpening::new_native_asset(
-            rng,
-            addr_fee_input.clone(),
-            15,
-            0,
-            Nullifier(InnerScalarField::zero()),
-        );
-        let rc_fee = ro_fee.derive_record_commitment().unwrap();
         let ro_source = RecordOpening::new(
             rng,
             addr_source.clone(),
@@ -582,22 +466,10 @@ mod test {
             Nullifier(InnerScalarField::one()),
         );
         let rc_source = ro_source.derive_record_commitment().unwrap();
+        let first_nullifier = ro_source.nullify(&pgk.nk).unwrap();
 
-        merkle_tree.push(rc_fee);
         merkle_tree.push(rc_source);
-        let (_, fee_acc_witness) = AccMemberWitness::lookup_from_tree(&merkle_tree, 0)
-            .expect_ok()
-            .unwrap();
-
-        let fee_input = NoteInput {
-            ro: ro_fee.clone(),
-            acc_member_witness: fee_acc_witness,
-            proof_gen_key: &pgk,
-            authorization_randomizer: Default::default(),
-            diversifier_randomizer: diversifier_fee_input.clone(),
-        };
-
-        let (_, acc_witness) = AccMemberWitness::lookup_from_tree(&merkle_tree, 1)
+        let (_, acc_witness) = AccMemberWitness::lookup_from_tree(&merkle_tree, 0)
             .expect_ok()
             .unwrap();
         let source_input = NoteInput {
@@ -610,35 +482,32 @@ mod test {
 
         let dummy_input = NoteInput::dummy(&pgk);
 
-        let inputs = vec![fee_input, source_input, dummy_input];
+        let inputs = vec![source_input, dummy_input];
 
-        let first_nullifier = ro_fee.nullify(&pgk.nk).unwrap();
-        let ro_fee_chng =
-            RecordOpening::new_native_asset(rng, addr_fee_input, 5, 0, first_nullifier.clone());
-        let ro_dest1 = RecordOpening::new(
+        let ro_dest0 = RecordOpening::new(
             rng,
             addr_source,
             Payload::default(),
             InnerScalarField::default(),
             InnerScalarField::default(),
-            1,
+            0,
             first_nullifier.clone(),
         );
-        let ro_dest2 = RecordOpening::new(
+        let ro_dest1 = RecordOpening::new(
             rng,
             addr_dest,
             Payload::default(),
             InnerScalarField::default(),
             InnerScalarField::default(),
-            2,
+            1,
             first_nullifier,
         );
 
-        let outputs = vec![ro_fee_chng, ro_dest1, ro_dest2];
+        let outputs = vec![ro_dest0, ro_dest1];
 
         let blinding_local_data = InnerScalarField::rand(rng);
         let witness = DPCUtxoWitness::new_unchecked(rng, inputs, outputs, blinding_local_data);
-        let public_input = DPCUtxoPublicInput::from_witness(&witness, fee, vec![]).unwrap();
+        let public_input = DPCUtxoPublicInput::from_witness(&witness, vec![]).unwrap();
 
         let circuit = DPCUtxoCircuit::build(&witness, &public_input).unwrap();
 
@@ -648,17 +517,8 @@ mod test {
             .unwrap();
 
         // bad paths
-        // 1. larger fee
-        let bad_fee = 11;
-        let public_input = DPCUtxoPublicInput::from_witness(&witness, bad_fee, vec![]).unwrap();
-        let circuit = DPCUtxoCircuit::build(&witness, &public_input).unwrap();
-        assert!(circuit
-            .0
-            .check_circuit_satisfiability(&public_input.to_scalars())
-            .is_err());
-
         // 2.  bad authorization verification key
-        let mut public_input = DPCUtxoPublicInput::from_witness(&witness, fee, vec![]).unwrap();
+        let mut public_input = DPCUtxoPublicInput::from_witness(&witness, vec![]).unwrap();
         public_input.authorization_verification_key = Default::default();
         let circuit = DPCUtxoCircuit::build(&witness, &public_input).unwrap();
         assert!(circuit
@@ -667,7 +527,7 @@ mod test {
             .is_err());
 
         // 3.  bad commitment local data
-        let mut public_input = DPCUtxoPublicInput::from_witness(&witness, fee, vec![]).unwrap();
+        let mut public_input = DPCUtxoPublicInput::from_witness(&witness, vec![]).unwrap();
         public_input.commitment_local_data = Default::default();
         let circuit = DPCUtxoCircuit::build(&witness, &public_input).unwrap();
         assert!(circuit
@@ -676,7 +536,7 @@ mod test {
             .is_err());
 
         // 4.  bad commitment predicates
-        let mut public_input = DPCUtxoPublicInput::from_witness(&witness, fee, vec![]).unwrap();
+        let mut public_input = DPCUtxoPublicInput::from_witness(&witness, vec![]).unwrap();
         public_input.commitment_predicates = Default::default();
         let circuit = DPCUtxoCircuit::build(&witness, &public_input).unwrap();
         assert!(circuit
