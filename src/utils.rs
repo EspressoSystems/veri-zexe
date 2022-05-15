@@ -123,16 +123,15 @@ fn check_non_dummy_inputs_witnesses(inputs: &[NoteInput]) -> Result<(), DPCApiEr
     let root = get_root_unchecked(inputs);
 
     // check: membership proofs of non-dummy inputs must share the same root
-    if root != dummy_witness.root {
-        if inputs
+    if root != dummy_witness.root
+        && inputs
             .iter()
             .any(|input| !input.ro.payload.is_dummy && input.acc_member_witness.root != root)
-        {
-            return Err(DPCApiError::InvalidParameter(
-                "Cannot generate DPC transaction: input witnesses do not share same merkle root"
-                    .to_string(),
-            ));
-        }
+    {
+        return Err(DPCApiError::InvalidParameter(
+            "Cannot generate DPC transaction: input witnesses do not share same merkle root"
+                .to_string(),
+        ));
     }
     Ok(())
 }

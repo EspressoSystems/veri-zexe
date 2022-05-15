@@ -21,28 +21,64 @@ use crate::{
     predicates::PredicateTrait,
     structs::compress_local_data,
     transaction::DPCTxnBody,
-    types::InnerScalarField,
+    types::{InnerScalarField, InnerUniversalParam, OuterUniversalParam},
 };
 use ark_std::{end_timer, println, rand::Rng, start_timer, vec, UniformRand, Zero};
+use jf_utils::Vec;
+use std::time::Instant;
 
 #[test]
 fn dpc_bench() -> Result<(), DPCApiError> {
     let rng = &mut ark_std::test_rng();
-    // TODO: Maybe adjust these two parameters after getting the circuit size
+    // NOTE: for predicate circuit of size 2^15, SRS degree for inner and outer are:
+    // 2-in-2-out: inner: (1 << 16) + 4, outer: (1 << 17) + 4;
+    // 3-in-3-out: inner: (1 << 16) + 4, outer: (1 << 17) + 4;
+    // 4-in-4-out: inner: (1 << 17) + 4, outer: (1 << 18) + 4;
+    // 5-in-5-out: inner: (1 << 17) + 4, outer: (1 << 18) + 4;
     let max_inner_degree = (1 << 17) + 4;
     let max_outer_degree = (1 << 18) + 4;
 
-    let start = start_timer!(|| "DPC::Setup");
+    let start = start_timer!(|| "DPC::Setup::universal");
+    let now = Instant::now();
+
     let inner_srs = crate::proofs::universal_setup_inner(max_inner_degree, rng)?;
     let outer_srs = crate::proofs::universal_setup_outer(max_outer_degree, rng)?;
 
-    // 2-input-2-output
-    let num_inputs = 2;
+    println!(
+        "⏱️ DPC::Setup::universal (inner_max_deg: {}, outer_max_deg: {}) takes {} ms",
+        max_inner_degree,
+        max_outer_degree,
+        now.elapsed().as_millis()
+    );
+    end_timer!(start);
 
+    zcash_transaction_full_cycle(&inner_srs, &outer_srs, 2)?;
+    zcash_transaction_full_cycle(&inner_srs, &outer_srs, 3)?;
+    zcash_transaction_full_cycle(&inner_srs, &outer_srs, 4)?;
+    zcash_transaction_full_cycle(&inner_srs, &outer_srs, 5)?;
+
+    Ok(())
+}
+
+fn zcash_transaction_full_cycle(
+    inner_srs: &InnerUniversalParam,
+    outer_srs: &OuterUniversalParam,
+    num_inputs: usize,
+) -> Result<(), DPCApiError> {
+    let rng = &mut ark_std::test_rng();
     println!("ℹ️ num of inputs/outputs: {}", num_inputs);
+
+    let start = start_timer!(|| "DPC::Setup::circuit-specific");
+    let now = Instant::now();
 
     let (dpc_pk, dpc_vk, mut birth_predicate, birth_pid, mut death_predicate, death_pid) =
         ZcashPredicate::preprocess(&inner_srs, &outer_srs, num_inputs)?;
+
+    println!(
+        "⏱️ DPC::Setup::circuit-specific takes {} ms",
+        now.elapsed().as_millis()
+    );
+    end_timer!(start);
 
     println!(
         "ℹ️ birth predicate size: {}; death predicate size: {}",
@@ -50,9 +86,8 @@ fn dpc_bench() -> Result<(), DPCApiError> {
         death_predicate.0.num_constraints(),
     );
 
-    end_timer!(start);
-
     let start = start_timer!(|| "DPC: GenAddress");
+    let now = Instant::now();
 
     // generate proof generation key and addresses
     let mut wsk = [0u8; 32];
@@ -61,19 +96,17 @@ fn dpc_bench() -> Result<(), DPCApiError> {
     let (ak, pgk, ivk) = msk.derive_key_chain_single_consumer();
     let (addr, rd) = msk.derive_diversified_address(&pgk, &ivk, 0)?;
 
+    println!("⏱️ DPC::GenAddress takes {} ms", now.elapsed().as_millis());
     end_timer!(start);
 
     let execute_start = start_timer!(|| "DPC: Execute");
+    let now = Instant::now();
 
     const NON_NATIVE_ASSET_ID: u64 = 2u64;
-    // =================================
-    // setup transaction parameters
-    // we have four types of records:
-    // - Zcash input notes
-    // - Zcash output notes
-    // =================================
-    let input_note_values = [18, 32];
-    let output_note_values = [9, 41];
+    let input_note_values: Vec<_> = (0..num_inputs).map(|i| 10 * (i as u64 + 1)).collect();
+    let output_note_values: Vec<_> = (0..num_inputs)
+        .map(|i| 10 * (num_inputs - i) as u64)
+        .collect();
 
     let (entire_input_records, entire_output_records) = build_notes_and_records(
         rng,
@@ -122,11 +155,17 @@ fn dpc_bench() -> Result<(), DPCApiError> {
     let input_death_predicates = vec![death_predicate.0; num_inputs];
     let output_birth_predicates = vec![birth_predicate.0; num_inputs];
 
-    ark_std::println!("Generating DPC txn body");
+    let aggregate_auth_key = {
+        let auth_keys = vec![ak.0; num_inputs];
+        let randomizers = vec![Default::default(); num_inputs];
+
+        aggregate_authorization_signing_keypairs(&auth_keys, &randomizers)?
+    };
+
     let txn_body = DPCTxnBody::generate(
         rng,
         &dpc_pk,
-        entire_input_notes.clone(),
+        entire_input_notes,
         entire_output_records,
         &input_death_predicates,
         &output_birth_predicates,
@@ -134,20 +173,17 @@ fn dpc_bench() -> Result<(), DPCApiError> {
         blinding_local_data,
     )?;
 
-    let txn_note = {
-        // TODO: move this earlier to avoid cloning entire_input_notes
-        let auth_keys = vec![ak.0; num_inputs];
-        let randomizers = vec![Default::default(); num_inputs];
-        let aggregate_auth_key =
-            aggregate_authorization_signing_keypairs(&auth_keys, &randomizers)?;
-        txn_body.authorize(&aggregate_auth_key)?
-    };
+    let txn_note = txn_body.authorize(&aggregate_auth_key)?;
 
+    println!("⏱️ DPC::Execute takes {} ms", now.elapsed().as_millis());
     end_timer!(execute_start);
 
     let verify = start_timer!(|| "DPC::Verify");
+    let now = Instant::now();
 
     txn_note.verify(&dpc_vk, merkle_root)?;
+    println!("⏱️ DPC::Verify takes {} ms", now.elapsed().as_millis());
     end_timer!(verify);
+
     Ok(())
 }

@@ -153,7 +153,10 @@ where
         RescueTranscript<InnerBaseField>,
     >(rng, &birth_predicates, &death_predicates)
     .map_err(|e| {
-        DPCApiError::InvalidParameters(format!("Preprocessing predicate circuit of failed: {}", e))
+        DPCApiError::InvalidParameters(format!(
+            "Batch proving birth & death predicates failed: {}",
+            e
+        ))
     })?;
 
     Ok(proof)

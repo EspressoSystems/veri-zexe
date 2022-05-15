@@ -28,7 +28,7 @@ use ark_std::{
     vec::Vec,
 };
 use jf_plonk::{
-    circuit::{customized::ecc::Point, Circuit},
+    circuit::customized::ecc::Point,
     proof_system::{
         batch_arg::BatchArgument,
         structs::{BatchProof, Proof, ProvingKey, VerifyingKey},
@@ -169,9 +169,18 @@ where
     }
 
     let (circuit, _) = PoliciesVfyCircuit::build(witness, pub_input, params)?;
-    circuit
-        .0
-        .check_circuit_satisfiability(&pub_input.to_scalars())?;
+
+    #[cfg(test)]
+    {
+        use jf_plonk::circuit::Circuit;
+        assert!(
+            circuit
+                .0
+                .check_circuit_satisfiability(&pub_input.to_scalars())
+                .is_ok(),
+            "Outer circuit is not SAT!"
+        );
+    }
 
     PlonkKzgSnark::<OuterPairingEngine>::prove::<_, _, StandardTranscript>(
         rng,
