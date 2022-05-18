@@ -28,7 +28,9 @@ pub(crate) const NONNATIVE_FIELD_M: usize = 128;
 pub const NATIVE_ASSET_CODE: InnerScalarField = ark_ff::field_new!(InnerScalarField, "1");
 
 /// RecordsCommitment merkle tree depth
-pub const TREE_DEPTH: u8 = 26;
+// NOTE: (alex) originally set to 26, but changed to 21 for benchmark purposes,
+// since ZCash record commitment tree has 2^32 leaves.
+pub const TREE_DEPTH: u8 = 21;
 
 /// Length of payload data
 pub const PAYLOAD_DATA_LEN: usize = 8;
