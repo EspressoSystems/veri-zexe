@@ -25,7 +25,7 @@ use crate::{
 };
 use ark_serialize::*;
 use ark_std::{end_timer, println, rand::Rng, start_timer, vec, UniformRand, Zero};
-use jf_utils::Vec;
+use jf_utils::{to_bytes, Vec};
 use std::time::Instant;
 
 #[test]
@@ -45,6 +45,11 @@ fn dpc_bench() -> Result<(), DPCApiError> {
 
     let inner_srs = crate::proofs::universal_setup_inner(max_inner_degree, rng)?;
     let outer_srs = crate::proofs::universal_setup_outer(max_outer_degree, rng)?;
+    println!(
+        "ℹ️️ inner_srs size: {} bytes, outer_srs size: {} bytes",
+        to_bytes!(&inner_srs).unwrap().len(),
+        to_bytes!(&outer_srs).unwrap().len()
+    );
 
     println!(
         "⏱️ DPC::Setup::universal (inner_max_deg: {}, outer_max_deg: {}) takes {} ms",
@@ -75,6 +80,10 @@ fn zcash_transaction_full_cycle(
 
     let (dpc_pk, dpc_vk, mut birth_predicate, birth_pid, mut death_predicate, death_pid) =
         ZcashPredicate::preprocess(&inner_srs, &outer_srs, num_inputs)?;
+    println!(
+        "ℹ️️ indexed DPC vk size: {} bytes",
+        to_bytes!(&dpc_vk).unwrap().len(),
+    );
 
     println!(
         "⏱️ DPC::Setup::circuit-specific takes {} ms",
@@ -156,6 +165,12 @@ fn zcash_transaction_full_cycle(
 
     let input_death_predicates = vec![death_predicate.0; num_inputs];
     let output_birth_predicates = vec![birth_predicate.0; num_inputs];
+    println!(
+        "ℹ️️ indexed predicate vk size: {} bytes",
+        to_bytes!(input_death_predicates[0].predicate.verify_key_ref())
+            .unwrap()
+            .len(),
+    );
 
     let aggregate_auth_key = {
         let auth_keys = vec![ak.0; num_inputs];

@@ -66,7 +66,7 @@ pub struct DPCProvingKey<'a> {
     pub(crate) beta_g: InnerG1Affine,
 }
 
-#[derive(Clone, Debug, PartialEq)] // TODO: derive hash and serialize/deserialize
+#[derive(Clone, Debug, PartialEq, CanonicalSerialize)] // TODO: derive hash and serialize/deserialize
 /// DPC Transaction verifying key
 pub struct DPCVerifyingKey {
     utxo_verifying_key: UtxoVerifyingKey,
