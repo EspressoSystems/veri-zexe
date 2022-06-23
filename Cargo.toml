@@ -1,6 +1,6 @@
 [package]
 name = "veri-zexe"
-description = "Universally-verifiable Zexe for Decentralized Private Computation"
+description = "Decentralized Private Computation with Universal Setup"
 authors = ["Espresso Systems <hello@espressosys.com>"]
 version = "0.1.0"
 edition = "2021"
