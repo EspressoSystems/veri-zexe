@@ -67,7 +67,7 @@ impl PolicyIdentifier {
         Self(fq_to_fr_with_mask::<InnerBaseField, InnerScalarField>(&tmp))
     }
     pub(crate) fn from_verifying_keys(vks: &[VerifyingKey<InnerPairingEngine>]) -> Vec<Self> {
-        vks.iter().map(|vk| Self::from_verifying_key(vk)).collect()
+        vks.iter().map(Self::from_verifying_key).collect()
     }
 }
 
