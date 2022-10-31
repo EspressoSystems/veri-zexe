@@ -14,18 +14,14 @@ ark-ec = { version = "0.3.0", default-features = false }
 ark-ed-on-bls12-377 = { git = "https://github.com/arkworks-rs/curves", default-features = false, rev = "677b4ae751a274037880ede86e9b6f30f62635af" }
 ark-ff = { version = "0.3.0", default-features = false }
 ark-serialize = { version = "0.3.0", default-features = false }
-# Arkworks
 ark-std = { version = "0.3.0", default-features = false }
 chacha20poly1305 = "0.9.0"
 curve25519-dalek = "4.0.0-pre.1"
 displaydoc = { version = "0.2.3", default-features = false }
 hkdf = "0.12.0"
-
-# Jellyfish
-jf-plonk = { features=["std"], git = "https://github.com/EspressoSystems/jellyfish.git" }
-jf-relation = { features=["std"], git = "https://github.com/EspressoSystems/jellyfish.git" }
-jf-primitives = { features=["std"], git = "https://github.com/EspressoSystems/jellyfish.git" }
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish.git" }
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish.git" }
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish.git" }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish.git" }
-
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 sha2 = { version = "0.10.1", default-features = false }
