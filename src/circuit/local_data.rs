@@ -17,8 +17,8 @@ use crate::{
     types::InnerScalarField,
 };
 use ark_std::vec::Vec;
-use jf_plonk::circuit::{Circuit, PlonkCircuit, Variable};
 use jf_primitives::circuit::commitment::CommitmentGadget;
+use jf_relation::{Circuit, PlonkCircuit, Variable};
 
 /// This function takes the following inputs
 /// - circuit
@@ -55,7 +55,7 @@ pub(crate) fn local_data_commitment_circuit(
     .concat();
 
     let derived_ldata_com_var = circuit.commit(&commitment_inputs, *blinding_local_data_var)?;
-    circuit.equal_gate(derived_ldata_com_var, *comm_local_data_var)?;
+    circuit.enforce_equal(derived_ldata_com_var, *comm_local_data_var)?;
 
     Ok(())
 }

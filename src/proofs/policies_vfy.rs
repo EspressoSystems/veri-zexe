@@ -28,20 +28,20 @@ use ark_std::{
     vec::Vec,
 };
 use jf_plonk::{
-    circuit::{customized::ecc::Point, Circuit},
     proof_system::{
         batch_arg::BatchArgument,
         structs::{BatchProof, Proof, ProvingKey, VerifyingKey},
-        PlonkKzgSnark, Snark,
+        PlonkKzgSnark, UniversalSNARK,
     },
     transcript::{RescueTranscript, StandardTranscript},
 };
+use jf_relation::{gadgets::ecc::Point, Circuit};
 use jf_utils::fr_to_fq;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct PoliciesVfyProvingKey<'a> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PoliciesVfyProvingKey {
     /// The actual proving key
-    pub(crate) proving_key: ProvingKey<'a, OuterPairingEngine>,
+    pub(crate) proving_key: ProvingKey<OuterPairingEngine>,
     /// Number of input records, i.e., #death predicates
     /// Note that the number of output records, i.e., #birth predicates
     /// should match this value.
@@ -106,12 +106,12 @@ pub(crate) struct PoliciesVfyParams {
 /// - proving key
 /// - verification key
 /// - total number of constraints of the policies circuit
-pub fn preprocess<'a>(
-    outer_srs: &'a OuterUniversalParam,
+pub fn preprocess(
+    outer_srs: &OuterUniversalParam,
     inner_srs: &InnerUniversalParam,
     num_input_records: usize,
     inner_policy_domain_size: usize,
-) -> Result<(PoliciesVfyProvingKey<'a>, PoliciesVfyVerifyingKey, usize), DPCApiError> {
+) -> Result<(PoliciesVfyProvingKey, PoliciesVfyVerifyingKey, usize), DPCApiError> {
     let (dummy_circuit, n_constraints) = PoliciesVfyCircuit::build_for_preprocessing(
         inner_srs,
         num_input_records,

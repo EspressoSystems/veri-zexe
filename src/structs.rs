@@ -44,8 +44,8 @@ use hkdf::Hkdf;
 use jf_plonk::proof_system::structs::VerifyingKey;
 use jf_primitives::{
     commitment::Commitment, hash_to_group::TEHashToGroup, merkle_tree::AccMemberWitness, prf::PRF,
+    rescue::Permutation,
 };
-use jf_rescue::Permutation;
 use jf_utils::{fq_to_fr_with_mask, tagged_blob};
 
 #[tagged_blob("NULLIFIER")]
@@ -95,7 +95,7 @@ impl RecordOpening {
         note_first_nullifier: Nullifier,
     ) -> RecordOpening {
         let blinding = InnerScalarField::rand(rng);
-        let hash = jf_rescue::Permutation::default();
+        let hash = Permutation::default();
         let input = [
             InnerScalarField::from(position_in_note as u64),
             note_first_nullifier.0,

@@ -17,8 +17,8 @@
 //! is a combination of predicates and circuits
 //! (which are simple wrappers of `Predicate` and `PredicateCircuit`).
 //! This requires implementation of the following traits
-//! - BirthPredicateCircuit
-//! - DeathPredicateCircuit
+//! - TypeACircuit
+//! - TypeBCircuit
 //! - PredicateOps
 //!
 //! Once the application is built, we take the following steps to generate a
@@ -68,7 +68,7 @@
 //! implemented via the default implementation.
 //! So here we only need to write the logic for the death predicate.
 
-use super::{BirthPredicateCircuit, DeathPredicateCircuit, PredicateOps};
+use super::{PredicateOps, TypeACircuit, TypeBCircuit};
 use crate::{
     circuit::{
         local_data::local_data_commitment_circuit,
@@ -85,7 +85,7 @@ use crate::{
     types::{InnerScalarField, InnerUniversalParam, OuterUniversalParam},
 };
 use ark_std::vec::Vec;
-use jf_plonk::circuit::{Arithmetization, Circuit, PlonkCircuit};
+use jf_relation::{Arithmetization, Circuit, MergeableCircuitType, PlonkCircuit};
 
 // A simple wrapper of predicate circuit
 struct AltZcashPredicateCircuit(PredicateCircuit);
@@ -97,10 +97,10 @@ impl From<PredicateCircuit> for AltZcashPredicateCircuit {
 }
 
 // A simple wrapper of predicate
-struct AltZcashPredicate<'a>(Predicate<'a>);
+struct AltZcashPredicate(Predicate);
 
-impl<'a> From<Predicate<'a>> for AltZcashPredicate<'a> {
-    fn from(predicate: Predicate<'a>) -> Self {
+impl From<Predicate> for AltZcashPredicate {
+    fn from(predicate: Predicate) -> Self {
         Self(predicate)
     }
 }
@@ -109,7 +109,7 @@ impl<'a> From<Predicate<'a>> for AltZcashPredicate<'a> {
 // 1. all asset_ids match
 // 2. sum inputs = sum outputs
 // 3. all the inputs are correctly w.r.t. commitment
-impl BirthPredicateCircuit for AltZcashPredicateCircuit {
+impl TypeACircuit for AltZcashPredicateCircuit {
     // Our code requires that #gates in a birth circuit to be greater
     // than that of a death circuit. If birth circuit has smaller size,
     // we need to pad the birth circuit to make it larger.
@@ -120,7 +120,7 @@ impl BirthPredicateCircuit for AltZcashPredicateCircuit {
 }
 
 // Extra, application dependent logics are defined in this circuit.
-impl DeathPredicateCircuit for AltZcashPredicateCircuit {
+impl TypeBCircuit for AltZcashPredicateCircuit {
     // we want to check:
     //  - it uses a same local data commitment as the birth predicate
     //  - the sum of input values is less than 2^13
@@ -166,7 +166,7 @@ impl DeathPredicateCircuit for AltZcashPredicateCircuit {
             sum_input_var =
                 death_circuit.add(sum_input_var, note.record_opening_var.payload.data[1])?;
         }
-        death_circuit.range_gate(sum_input_var, 13)?;
+        death_circuit.is_in_range(sum_input_var, 13)?;
 
         // pad the death circuit with dummy gates
         let current_gate_count = death_circuit.num_gates();
@@ -175,13 +175,13 @@ impl DeathPredicateCircuit for AltZcashPredicateCircuit {
              .0
             .num_gates();
 
-        death_circuit.pad_gate(target_gate_count - current_gate_count);
+        death_circuit.pad_gates(target_gate_count - current_gate_count);
 
         Ok(AltZcashPredicateCircuit(PredicateCircuit(death_circuit)))
     }
 }
 
-impl<'a> PredicateOps<'a> for AltZcashPredicate<'a> {
+impl<'a> PredicateOps<'a> for AltZcashPredicate {
     /// Setup the circuit and related parameters
     ///
     /// Inputs:
@@ -203,7 +203,7 @@ impl<'a> PredicateOps<'a> for AltZcashPredicate<'a> {
         entire_input_size: usize,
     ) -> Result<
         (
-            DPCProvingKey<'a>,
+            DPCProvingKey,
             DPCVerifyingKey,
             Self,
             PolicyIdentifier,
@@ -225,7 +225,7 @@ impl<'a> PredicateOps<'a> for AltZcashPredicate<'a> {
         birth_predicate_circuit
             .0
              .0
-            .finalize_for_mergeable_circuit(jf_plonk::MergeableCircuitType::TypeA)?;
+            .finalize_for_mergeable_circuit(MergeableCircuitType::TypeA)?;
 
         // the inner domain size is the birth (or death) circuit's domain size
         let inner_domain_size = birth_predicate_circuit.0 .0.eval_domain_size()?;
@@ -289,9 +289,9 @@ impl<'a> PredicateOps<'a> for AltZcashPredicate<'a> {
         // finalize the circuit, and update the witness accordingly
 
         let circuit_type = if is_birth_predicate {
-            jf_plonk::MergeableCircuitType::TypeA
+            MergeableCircuitType::TypeA
         } else {
-            jf_plonk::MergeableCircuitType::TypeB
+            MergeableCircuitType::TypeB
         };
 
         final_circuit
@@ -503,7 +503,7 @@ mod test {
             &witness,
             fee as u64,
             dummy_memo.to_vec(),
-            inner_srs.powers_of_g_ref()[1],
+            inner_srs.powers_of_g[1],
         )?;
 
         // generate the proof and verify it

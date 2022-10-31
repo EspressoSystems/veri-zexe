@@ -251,7 +251,7 @@ impl KeyChainMasterKey {
 
 /// Public key to give to senders to generate detection tag
 #[tagged_blob("DET-PUBKEY")]
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct DetectionPubKey(pub(crate) RistrettoPoint);
 
 impl CanonicalSerialize for DetectionPubKey {
@@ -284,7 +284,7 @@ impl CanonicalDeserialize for DetectionPubKey {
 /// Key pair to give to detector to filter out matching `ReceiverMemo`s with
 /// designated detection tags.
 #[tagged_blob("DET-KEY")]
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct DetectionKeyPair {
     pub(crate) sk: Curve25519Scalar,
     pub(crate) pk: RistrettoPoint,

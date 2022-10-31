@@ -21,20 +21,20 @@ use crate::{
 use ark_ff::{Field, PrimeField, Zero};
 use ark_std::{string::ToString, vec, vec::Vec};
 use jf_plonk::{
-    circuit::{
-        customized::{
-            ecc::{Point, PointVariable},
-            rescue::{RescueGadget, RescueNonNativeGadget},
-            ultraplonk::{
-                mod_arith::FpElemVar,
-                plonk_verifier::{BatchProofVar, VerifyingKeyVar},
-            },
-        },
-        Circuit, PlonkCircuit, Variable,
-    },
+    circuit::plonk_verifier::{BatchProofVar, BatchableCircuit, VerifyingKeyVar},
     errors::PlonkError,
 };
-use jf_rescue::RATE;
+use jf_primitives::{
+    circuit::rescue::{RescueGadget, RescueNonNativeGadget},
+    rescue::RATE,
+};
+use jf_relation::{
+    gadgets::{
+        ecc::{Point, PointVariable},
+        ultraplonk::mod_arith::FpElemVar,
+    },
+    Circuit, PlonkCircuit, Variable,
+};
 use jf_utils::{compute_len_to_next_multiple, field_switching};
 
 pub(crate) struct PoliciesVfyCircuit(pub(crate) PlonkCircuit<InnerBaseField>);
@@ -50,8 +50,8 @@ impl PoliciesVfyCircuit {
         let dummy_witness = PoliciesVfyWitness::dummy(num_input, inner_policy_domain_size);
         let comm_local_data = InnerScalarField::zero();
         let params = PoliciesVfyParams {
-            beta_g: srs.powers_of_g_ref()[1],
-            generator_g: srs.powers_of_g_ref()[0],
+            beta_g: srs.powers_of_g[1],
+            generator_g: srs.powers_of_g[0],
             m: NONNATIVE_FIELD_M,
             two_power_m: Some(InnerBaseField::from(2u8).pow(&[NONNATIVE_FIELD_M as u64])),
             range_bit_len: RANGE_BIT_LEN,
@@ -98,14 +98,14 @@ impl PoliciesVfyCircuit {
         let input_death_pids = input_death_pids
             .iter()
             .map(|&pid| FpElemVar::new_unchecked(&mut circuit, pid, params.m, params.two_power_m))
-            .collect::<Result<Vec<_>, PlonkError>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         let output_birth_pids =
             derive_policy_identifier_vars(&mut circuit, &witness.output_birth_vks)?;
         let output_birth_pids = output_birth_pids
             .iter()
             .map(|&pid| FpElemVar::new_unchecked(&mut circuit, pid, params.m, params.two_power_m))
-            .collect::<Result<Vec<_>, PlonkError>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         // 2. Check predicates commitment
         let zero_fp_elem_var = FpElemVar::zero(&circuit, params.m, params.two_power_m);
@@ -116,7 +116,7 @@ impl PoliciesVfyCircuit {
             witness.blind_comm_predicates,
             zero_fp_elem_var,
         )?;
-        circuit.equal_gate(expected_comm_predicates, pub_input.comm_predicates)?;
+        circuit.enforce_equal(expected_comm_predicates, pub_input.comm_predicates)?;
 
         // 3. Derive aggregated verification key and check partial verification circuit
         let merged_vks = circuit.aggregate_verify_keys::<InnerPairingEngine, InnerG1Group>(
@@ -138,8 +138,8 @@ impl PoliciesVfyCircuit {
             &witness.batch_proof,
             witness.blind_partial_proof,
         )?;
-        circuit.point_equal_gate(&pub_input.partial_plonk_proof.0, &expected_partial_proof.0)?;
-        circuit.point_equal_gate(&pub_input.partial_plonk_proof.1, &expected_partial_proof.1)?;
+        circuit.enforce_point_equal(&pub_input.partial_plonk_proof.0, &expected_partial_proof.0)?;
+        circuit.enforce_point_equal(&pub_input.partial_plonk_proof.1, &expected_partial_proof.1)?;
         let n_constraints = circuit.num_gates();
         #[cfg(test)]
         {
@@ -179,12 +179,12 @@ impl PoliciesVfyWitnessVar {
             .input_death_vks
             .iter()
             .map(|vk| VerifyingKeyVar::new(circuit, vk))
-            .collect::<Result<Vec<_>, PlonkError>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let output_birth_vks = witness
             .output_birth_vks
             .iter()
             .map(|vk| VerifyingKeyVar::new(circuit, vk))
-            .collect::<Result<Vec<_>, PlonkError>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let batch_proof = witness
             .batch_proof
             .create_variables::<InnerBaseField, InnerG1Group>(
@@ -282,7 +282,7 @@ fn derive_predicate_commitment_var(
     let expected_comm_predicates = RescueNonNativeGadget::rescue_sponge_no_padding::<
         InnerScalarField,
     >(circuit, &data_vars, 1)?[0];
-    expected_comm_predicates.convert_to_var(circuit)
+    Ok(expected_comm_predicates.convert_to_var(circuit)?)
 }
 
 #[cfg(test)]
@@ -295,7 +295,9 @@ pub(crate) mod tests {
         test_rng, UniformRand,
     };
     use jf_plonk::{
-        proof_system::{batch_arg::build_batch_proof_and_vks_for_test, PlonkKzgSnark},
+        proof_system::{
+            batch_arg::build_batch_proof_and_vks_for_test, PlonkKzgSnark, UniversalSNARK,
+        },
         transcript::RescueTranscript,
     };
 
@@ -352,8 +354,8 @@ pub(crate) mod tests {
             blind_partial_proof,
         )?;
         let params = PoliciesVfyParams {
-            beta_g: srs.powers_of_g_ref()[1],
-            generator_g: srs.powers_of_g_ref()[0],
+            beta_g: srs.powers_of_g[1],
+            generator_g: srs.powers_of_g[0],
             m: NONNATIVE_FIELD_M,
             two_power_m: Some(InnerBaseField::from(2u8).pow(&[NONNATIVE_FIELD_M as u64])),
             range_bit_len: RANGE_BIT_LEN,

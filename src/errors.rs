@@ -15,6 +15,7 @@ use ark_std::{convert::From, format, string::String};
 use displaydoc::Display;
 use jf_plonk::errors::PlonkError;
 use jf_primitives::errors::PrimitivesError;
+use jf_relation::errors::CircuitError;
 
 /// All possible categories of error from DPC scheme
 #[derive(Display, Debug)]
@@ -45,6 +46,8 @@ pub enum DPCApiError {
     DeserializationError(String),
     /// Incorrect fee collection: {0}
     IncorrectFee(String),
+    /// Circuit error: {0}
+    CircuitError(CircuitError),
     /// Parameters generation error:{0}
     ParametersGenerationError(String),
     #[rustfmt::skip]
@@ -73,5 +76,11 @@ impl From<ark_serialize::SerializationError> for DPCApiError {
 impl From<PlonkError> for DPCApiError {
     fn from(e: PlonkError) -> Self {
         DPCApiError::FailedSnark(e)
+    }
+}
+
+impl From<CircuitError> for DPCApiError {
+    fn from(e: CircuitError) -> Self {
+        DPCApiError::CircuitError(e)
     }
 }
