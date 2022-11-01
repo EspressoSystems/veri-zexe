@@ -59,6 +59,13 @@ fn dpc_bench() -> Result<(), DPCApiError> {
     );
     end_timer!(start);
 
+    let mem = proc_status::mem_usage().unwrap();
+    println!(
+        "⚠️ After UniversalSetup, Mem usage: current={} KB, peak={} KB",
+        mem.current / 1024,
+        mem.peak / 1024
+    );
+
     zcash_transaction_full_cycle(&inner_srs, &outer_srs, 2)?;
     zcash_transaction_full_cycle(&inner_srs, &outer_srs, 3)?;
     zcash_transaction_full_cycle(&inner_srs, &outer_srs, 4)?;
@@ -95,6 +102,13 @@ fn zcash_transaction_full_cycle(
         "ℹ️ birth predicate size: {}; death predicate size: {}",
         birth_predicate.0.num_constraints(),
         death_predicate.0.num_constraints(),
+    );
+
+    let mem = proc_status::mem_usage().unwrap();
+    println!(
+        "⚠️ After Indexing, Mem usage: current={} KB, peak={} KB",
+        mem.current / 1024,
+        mem.peak / 1024
     );
 
     let start = start_timer!(|| "DPC: GenAddress");
@@ -205,6 +219,13 @@ fn zcash_transaction_full_cycle(
 
     println!("⏱️ DPC::Execute takes {} ms", now.elapsed().as_millis());
     end_timer!(execute_start);
+
+    let mem = proc_status::mem_usage().unwrap();
+    println!(
+        "⚠️ After Execute, Mem usage: current={} KB, peak={} KB",
+        mem.current / 1024,
+        mem.peak / 1024
+    );
 
     let verify = start_timer!(|| "DPC::Verify");
     let now = Instant::now();

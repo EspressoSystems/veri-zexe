@@ -23,5 +23,6 @@ jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish.git" }
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish.git" }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish.git" }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish.git" }
+proc-status = "0.1.1"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 sha2 = { version = "0.10.1", default-features = false }

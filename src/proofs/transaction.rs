@@ -112,12 +112,26 @@ impl<'a> DPCWitness<'a> {
             DPCUtxoWitness::new_unchecked(rng, entire_inputs, entire_outputs, blinding_local_data);
 
         let now = Instant::now();
+        let mem = proc_status::mem_usage().unwrap();
+        ark_std::println!(
+            "⚠️ Before Pred Proof Gen, Mem usage: current={} KB, peak={} KB",
+            mem.current / 1024,
+            mem.peak / 1024
+        );
+
         // derive outer circuit witness
         let batch_proof = predicates::prove(rng, output_birth_predicates, input_death_predicates)?;
         ark_std::println!(
             "⏱️ all {} predicate proofs gen takes: {} ms",
             output_birth_predicates.len() + input_death_predicates.len(),
             now.elapsed().as_millis()
+        );
+
+        let mem = proc_status::mem_usage().unwrap();
+        ark_std::println!(
+            "⚠️ After Pred Proof Gen, Mem usage: current={} KB, peak={} KB",
+            mem.current / 1024,
+            mem.peak / 1024
         );
 
         // TODO: remove clone
@@ -270,6 +284,13 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
     public_inputs: &DPCPublicInput,
 ) -> Result<DPCValidityProof, DPCApiError> {
     let now = Instant::now();
+    let mem = proc_status::mem_usage().unwrap();
+    ark_std::println!(
+        "⚠️ Before UTXO Proof Gen, Mem usage: current={} KB, peak={} KB",
+        mem.current / 1024,
+        mem.peak / 1024
+    );
+
     // compute inner UTXO proof
     let utxo_proof = super::utxo::prove_utxo(
         rng,
@@ -278,6 +299,13 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
         &public_inputs.utxo_public_input,
     )?;
     ark_std::println!("⏱️️ UTXO proof gen takes: {} ms", now.elapsed().as_millis());
+
+    let mem = proc_status::mem_usage().unwrap();
+    ark_std::println!(
+        "⚠️ After UTXO Proof Gen, Mem usage: current={} KB, peak={} KB",
+        mem.current / 1024,
+        mem.peak / 1024
+    );
 
     // compute outer proof
     let params = PoliciesVfyParams {
@@ -294,6 +322,13 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
         partial_plonk_proof: public_inputs.inner_partial_vfy_proof,
     };
 
+    let mem = proc_status::mem_usage().unwrap();
+    ark_std::println!(
+        "⚠️ Before Outer Proof Gen, Mem usage: current={} KB, peak={} KB",
+        mem.current / 1024,
+        mem.peak / 1024
+    );
+
     let now = Instant::now();
     let policies_vfy_proof = super::policies_vfy::prove(
         rng,
@@ -304,6 +339,13 @@ pub(crate) fn prove<R: RngCore + CryptoRng>(
         None,
     )?;
     ark_std::println!("⏱️ Outer proof gen takes: {} ms", now.elapsed().as_millis());
+
+    let mem = proc_status::mem_usage().unwrap();
+    ark_std::println!(
+        "⚠️ After Outer Proof Gen, Mem usage: current={} KB, peak={} KB",
+        mem.current / 1024,
+        mem.peak / 1024
+    );
 
     Ok(DPCValidityProof {
         utxo_proof,

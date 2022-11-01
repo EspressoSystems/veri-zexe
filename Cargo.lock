@@ -1037,6 +1037,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-status"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0e0c0ac915e7b76b47850ba4ffc377abde6c6ff9eeace61d0a89623db449712"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1400,6 +1409,7 @@ dependencies = [
  "jf-primitives",
  "jf-relation",
  "jf-utils",
+ "proc-status",
  "serde",
  "sha2",
 ]
