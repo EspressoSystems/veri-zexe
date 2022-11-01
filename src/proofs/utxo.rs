@@ -30,14 +30,14 @@ use ark_std::{
 };
 use jf_plonk::{
     circuit::Circuit,
-    proof_system::{PlonkKzgSnark, Snark},
+    proof_system::{PlonkKzgSnark, UniversalSNARK},
     transcript::StandardTranscript,
 };
 use jf_primitives::merkle_tree::AccMemberWitness;
 
 /// The UTXO part of the proving key
-pub type UtxoProvingKey<'a> =
-    jf_plonk::proof_system::structs::ProvingKey<'a, crate::types::InnerPairingEngine>;
+pub type UtxoProvingKey =
+    jf_plonk::proof_system::structs::ProvingKey<crate::types::InnerPairingEngine>;
 
 /// The UTXO part of the verifying key
 pub type UtxoVerifyingKey =

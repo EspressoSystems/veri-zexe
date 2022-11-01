@@ -44,20 +44,20 @@ pub struct PredicateCircuit(pub(crate) PlonkCircuit<InnerScalarField>);
 /// This type can be an instantiation of either a birth predicate or a death
 /// predicate
 #[derive(Clone)]
-pub struct Predicate<'a> {
+pub struct Predicate {
     pub(crate) is_finalized: bool,
-    pub(crate) predicate: PlonkPredicate<'a, InnerPairingEngine>,
+    pub(crate) predicate: PlonkPredicate<InnerPairingEngine>,
 }
 
-impl<'a> PredicateTrait<'a> for Predicate<'a> {
+impl PredicateTrait for Predicate {
     /// the actual, unwrapped predicate.
-    type PlonkPredicate = PlonkPredicate<'a, InnerPairingEngine>;
+    type PlonkPredicate = PlonkPredicate<InnerPairingEngine>;
 
     /// the circuit corresponding to this predicate
     type PredicateCircuit = PredicateCircuit;
 
     /// Proving key
-    type ProvingKey = ProvingKey<'a, InnerPairingEngine>;
+    type ProvingKey = ProvingKey<InnerPairingEngine>;
 
     /// Verification key
     type VerificationKey = VerifyingKey<InnerPairingEngine>;
@@ -92,7 +92,7 @@ impl<'a> PredicateTrait<'a> for Predicate<'a> {
     /// - an indicator whether this is a birth or death predicate
     /// Output the predicate or an error
     fn new(
-        srs: &'a InnerUniversalParam,
+        srs: &InnerUniversalParam,
         circuit: &Self::PredicateCircuit,
         is_birth_predicate: bool,
     ) -> Result<Self, DPCApiError> {
@@ -130,7 +130,7 @@ impl<'a> PredicateTrait<'a> for Predicate<'a> {
 /// - death predicate
 /// output:
 /// - proof
-pub fn prove<'a, P, R>(
+pub fn prove<P, R>(
     rng: &mut R,
     birth_predicates: &[P],
     death_predicates: &[P],
@@ -138,9 +138,8 @@ pub fn prove<'a, P, R>(
 where
     R: RngCore + CryptoRng,
     P: PredicateTrait<
-        'a,
         Proof = BatchProof<InnerPairingEngine>,
-        PlonkPredicate = PlonkPredicate<'a, InnerPairingEngine>,
+        PlonkPredicate = PlonkPredicate<InnerPairingEngine>,
     >,
 {
     let birth_predicates: Vec<P::PlonkPredicate> =
@@ -148,7 +147,7 @@ where
     let death_predicates: Vec<P::PlonkPredicate> =
         death_predicates.iter().map(|x| x.predicate()).collect();
 
-    let proof = BatchArgument::<'a, InnerPairingEngine>::batch_prove::<
+    let proof = BatchArgument::<InnerPairingEngine>::batch_prove::<
         R,
         RescueTranscript<InnerBaseField>,
     >(rng, &birth_predicates, &death_predicates)
@@ -167,7 +166,7 @@ where
 /// - batched proof
 /// output:
 /// - Ok if the verification passes; or an error if fails
-pub fn verify<'a, P>(
+pub fn verify<P>(
     birth_vks: &[&P::VerificationKey],
     death_vks: &[&P::VerificationKey],
     public_inputs: &[InnerScalarField],
@@ -175,7 +174,6 @@ pub fn verify<'a, P>(
 ) -> Result<(), DPCApiError>
 where
     P: PredicateTrait<
-        'a,
         VerificationKey = VerifyingKey<InnerPairingEngine>,
         Proof = BatchProof<InnerPairingEngine>,
     >,
@@ -228,7 +226,10 @@ mod tests {
     use super::*;
     use ark_ff::UniformRand;
     use ark_std::{test_rng, vec};
-    use jf_plonk::{circuit::Circuit, proof_system::PlonkKzgSnark};
+    use jf_plonk::{
+        circuit::Circuit,
+        proof_system::{PlonkKzgSnark, UniversalSNARK},
+    };
 
     #[test]
     fn test_predicate_proof() -> Result<(), DPCApiError> {
@@ -310,11 +311,11 @@ mod tests {
         Ok(())
     }
 
-    fn new_predicate_circuit_for_test<'a>(
+    fn new_predicate_circuit_for_test(
         shared_public_input: InnerScalarField,
         i: usize,
         is_birth_predicate: bool,
-    ) -> Result<<Predicate<'a> as PredicateTrait<'a>>::PredicateCircuit, DPCApiError> {
+    ) -> Result<<Predicate as PredicateTrait>::PredicateCircuit, DPCApiError> {
         let mut circuit = PlonkCircuit::new_turbo_plonk();
         let shared_pub_var = circuit.create_public_variable(shared_public_input)?;
         let mut var = shared_pub_var;

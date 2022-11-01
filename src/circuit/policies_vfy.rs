@@ -295,7 +295,9 @@ pub(crate) mod tests {
         test_rng, UniformRand,
     };
     use jf_plonk::{
-        proof_system::{batch_arg::build_batch_proof_and_vks_for_test, PlonkKzgSnark},
+        proof_system::{
+            batch_arg::build_batch_proof_and_vks_for_test, PlonkKzgSnark, UniversalSNARK,
+        },
         transcript::RescueTranscript,
     };
 

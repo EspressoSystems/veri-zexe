@@ -231,9 +231,9 @@ where
     }
 }
 
-pub(crate) trait PredicateOps<'a>
+pub(crate) trait PredicateOps
 where
-    Self: Sized + From<Predicate<'a>>,
+    Self: Sized + From<Predicate>,
 {
     /// Setup the circuit and related parameters
     ///
@@ -251,12 +251,12 @@ where
     /// - Death predicate (with dummy local commitment)
     /// - Death predicate PIDs
     fn preprocess(
-        inner_srs: &'a InnerUniversalParam,
-        outer_srs: &'a OuterUniversalParam,
+        inner_srs: &InnerUniversalParam,
+        outer_srs: &OuterUniversalParam,
         entire_input_size: usize,
     ) -> Result<
         (
-            DPCProvingKey<'a>,
+            DPCProvingKey,
             DPCVerifyingKey,
             Self,
             PolicyIdentifier,

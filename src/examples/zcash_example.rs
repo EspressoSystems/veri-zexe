@@ -96,10 +96,10 @@ impl From<PredicateCircuit> for ZcashPredicateCircuit {
 }
 
 // A simple wrapper of predicate
-pub(crate) struct ZcashPredicate<'a>(pub(crate) Predicate<'a>);
+pub(crate) struct ZcashPredicate(pub(crate) Predicate);
 
-impl<'a> From<Predicate<'a>> for ZcashPredicate<'a> {
-    fn from(predicate: Predicate<'a>) -> Self {
+impl From<Predicate> for ZcashPredicate {
+    fn from(predicate: Predicate) -> Self {
         Self(predicate)
     }
 }
@@ -171,7 +171,7 @@ impl DeathPredicateCircuit for ZcashPredicateCircuit {
     }
 }
 
-impl<'a> PredicateOps<'a> for ZcashPredicate<'a> {
+impl PredicateOps for ZcashPredicate {
     /// Setup the circuit and related parameters
     ///
     /// Inputs:
@@ -188,12 +188,12 @@ impl<'a> PredicateOps<'a> for ZcashPredicate<'a> {
     /// - Death predicate (with dummy local commitment)
     /// - Death predicate PIDs
     fn preprocess(
-        inner_srs: &'a InnerUniversalParam,
-        outer_srs: &'a OuterUniversalParam,
+        inner_srs: &InnerUniversalParam,
+        outer_srs: &OuterUniversalParam,
         entire_input_size: usize,
     ) -> Result<
         (
-            DPCProvingKey<'a>,
+            DPCProvingKey,
             DPCVerifyingKey,
             Self,
             PolicyIdentifier,

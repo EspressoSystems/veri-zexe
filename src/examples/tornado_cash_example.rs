@@ -103,9 +103,9 @@ impl From<PredicateCircuit> for TcashPredicateCircuit {
 }
 
 // A simple wrapper of predicate
-struct TcashPredicate<'a>(Predicate<'a>);
-impl<'a> From<Predicate<'a>> for TcashPredicate<'a> {
-    fn from(predicate: Predicate<'a>) -> Self {
+struct TcashPredicate(Predicate);
+impl From<Predicate> for TcashPredicate {
+    fn from(predicate: Predicate) -> Self {
         Self(predicate)
     }
 }
@@ -203,7 +203,7 @@ impl DeathPredicateCircuit for TcashPredicateCircuit {
     }
 }
 
-impl<'a> PredicateOps<'a> for TcashPredicate<'a> {
+impl PredicateOps for TcashPredicate {
     /// Setup the circuit and related parameters
     ///
     /// Inputs:
@@ -220,12 +220,12 @@ impl<'a> PredicateOps<'a> for TcashPredicate<'a> {
     /// - Death predicate (with dummy local commitment)
     /// - Death predicate PIDs
     fn preprocess(
-        inner_srs: &'a InnerUniversalParam,
-        outer_srs: &'a OuterUniversalParam,
+        inner_srs: &InnerUniversalParam,
+        outer_srs: &OuterUniversalParam,
         entire_input_size: usize,
     ) -> Result<
         (
-            DPCProvingKey<'a>,
+            DPCProvingKey,
             DPCVerifyingKey,
             Self,
             PolicyIdentifier,

@@ -16,7 +16,7 @@ use crate::{
     types::{InnerPairingEngine, InnerUniversalParam, OuterPairingEngine, OuterUniversalParam},
 };
 use ark_std::rand::{CryptoRng, RngCore};
-use jf_plonk::proof_system::PlonkKzgSnark;
+use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
 
 pub(crate) mod policies_vfy;
 pub(crate) mod predicates;

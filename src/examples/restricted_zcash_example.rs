@@ -97,10 +97,10 @@ impl From<PredicateCircuit> for AltZcashPredicateCircuit {
 }
 
 // A simple wrapper of predicate
-struct AltZcashPredicate<'a>(Predicate<'a>);
+struct AltZcashPredicate(Predicate);
 
-impl<'a> From<Predicate<'a>> for AltZcashPredicate<'a> {
-    fn from(predicate: Predicate<'a>) -> Self {
+impl From<Predicate> for AltZcashPredicate {
+    fn from(predicate: Predicate) -> Self {
         Self(predicate)
     }
 }
@@ -181,7 +181,7 @@ impl DeathPredicateCircuit for AltZcashPredicateCircuit {
     }
 }
 
-impl<'a> PredicateOps<'a> for AltZcashPredicate<'a> {
+impl PredicateOps for AltZcashPredicate {
     /// Setup the circuit and related parameters
     ///
     /// Inputs:
@@ -198,12 +198,12 @@ impl<'a> PredicateOps<'a> for AltZcashPredicate<'a> {
     /// - Death predicate (with dummy local commitment)
     /// - Death predicate PIDs
     fn preprocess(
-        inner_srs: &'a InnerUniversalParam,
-        outer_srs: &'a OuterUniversalParam,
+        inner_srs: &InnerUniversalParam,
+        outer_srs: &OuterUniversalParam,
         entire_input_size: usize,
     ) -> Result<
         (
-            DPCProvingKey<'a>,
+            DPCProvingKey,
             DPCVerifyingKey,
             Self,
             PolicyIdentifier,

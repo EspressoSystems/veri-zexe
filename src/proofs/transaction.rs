@@ -58,9 +58,9 @@ pub struct DPCValidityProof {
 
 #[derive(Clone, Debug, PartialEq)] // TODO: derive hash and serialize/deserialize
 /// DPC Transaction proving key
-pub struct DPCProvingKey<'a> {
-    utxo_proving_key: UtxoProvingKey<'a>,
-    policies_vfy_proving_key: PoliciesVfyProvingKey<'a>,
+pub struct DPCProvingKey {
+    utxo_proving_key: UtxoProvingKey,
+    policies_vfy_proving_key: PoliciesVfyProvingKey,
     // A group element used in inner predicate proofs verification circuit.
     pub(crate) beta_g: InnerG1Affine,
 }
@@ -212,12 +212,12 @@ impl DPCPublicInput {
 /// - DPC proving key
 /// - DPC verification key
 /// - total number of constraints of the utxo/outer circuit
-pub fn preprocess<'a>(
-    outer_srs: &'a OuterUniversalParam,
-    inner_srs: &'a InnerUniversalParam,
+pub fn preprocess(
+    outer_srs: &OuterUniversalParam,
+    inner_srs: &InnerUniversalParam,
     non_fee_input_size: usize,
     unmerged_inner_policy_domain_size: usize,
-) -> Result<(DPCProvingKey<'a>, DPCVerifyingKey, (usize, usize)), DPCApiError> {
+) -> Result<(DPCProvingKey, DPCVerifyingKey, (usize, usize)), DPCApiError> {
     let (utxo_proving_key, utxo_verifying_key, utxo_n_constraints) =
         preprocess_utxo_keys(inner_srs, non_fee_input_size)?;
 
@@ -495,9 +495,9 @@ mod tests {
         PredicateCircuit(inner_pred_cs)
     }
 
-    fn build_dpc_info_for_test<'a, 'b, R: CryptoRng + RngCore>(
+    fn build_dpc_info_for_test<'b, R: CryptoRng + RngCore>(
         rng: &mut R,
-        inner_srs: &'a InnerUniversalParam,
+        inner_srs: &InnerUniversalParam,
         pgk: &'b ProofGenerationKey,
         addr: DiversifiedAddress,
         rd: DiversifierRandomizer,
@@ -506,8 +506,8 @@ mod tests {
         (
             Vec<NoteInput<'b>>,
             Vec<RecordOpening>,
-            Vec<Predicate<'a>>,
-            Vec<Predicate<'a>>,
+            Vec<Predicate>,
+            Vec<Predicate>,
             u64,
             Vec<InnerScalarField>,
             InnerScalarField,

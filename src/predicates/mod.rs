@@ -14,7 +14,7 @@
 use crate::{errors::DPCApiError, types::InnerUniversalParam};
 
 /// Predicate trait
-pub trait PredicateTrait<'a>
+pub trait PredicateTrait
 where
     Self: Sized,
 {
@@ -54,7 +54,7 @@ where
     /// - an indicator whether this is a birth or death predicate
     /// Output the predicate or an error
     fn new(
-        srs: &'a InnerUniversalParam,
+        srs: &InnerUniversalParam,
         circuit: &Self::PredicateCircuit,
         is_birth_predicate: bool,
     ) -> Result<Self, DPCApiError>;
