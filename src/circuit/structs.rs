@@ -15,15 +15,13 @@ use crate::{
 };
 use ark_ec::ProjectiveCurve;
 use ark_std::{vec, vec::Vec};
-use jf_plonk::{
-    circuit::{
-        customized::ecc::{Point, PointVariable},
-        Circuit, PlonkCircuit, Variable,
-    },
-    errors::PlonkError,
-};
+use jf_plonk::errors::PlonkError;
 use jf_primitives::circuit::{
     commitment::CommitmentGadget, merkle_tree::AccMemberWitnessVar, prf::PrfGadget,
+};
+use jf_relation::{
+    gadgets::ecc::{Point, PointVariable},
+    Circuit, PlonkCircuit, Variable,
 };
 
 #[derive(Clone)]
@@ -85,7 +83,7 @@ impl RecordOpeningVar {
         msg.push(self.pid_death);
         msg.push(self.nonce);
 
-        circuit.commit(&msg, self.blinding)
+        Ok(circuit.commit(&msg, self.blinding)?)
     }
 
     pub(crate) fn nullify(
@@ -93,7 +91,7 @@ impl RecordOpeningVar {
         circuit: &mut PlonkCircuit<InnerScalarField>,
         nullifier_key: &NullifierDerivingKeyVar,
     ) -> Result<Variable, PlonkError> {
-        circuit.eval_prf(nullifier_key.0, &[self.nonce])
+        Ok(circuit.eval_prf(nullifier_key.0, &[self.nonce])?)
     }
 }
 
@@ -156,7 +154,7 @@ impl ProofGenerationKeyVar {
         diversifier_randomizer: Variable,
     ) -> Result<Variable, PlonkError> {
         let msg = vec![self.ak.0.get_x(), self.ak.0.get_y(), self.nk.0];
-        circuit.commit(&msg, diversifier_randomizer)
+        Ok(circuit.commit(&msg, diversifier_randomizer)?)
     }
 }
 #[cfg(test)]
@@ -169,8 +167,8 @@ mod test {
     };
     use ark_ff::{One, UniformRand};
     use ark_std::rand::{CryptoRng, RngCore};
-    use jf_plonk::circuit::{Circuit, PlonkCircuit};
     use jf_primitives::prf::PrfKey;
+    use jf_relation::{Circuit, PlonkCircuit};
 
     fn sample_record<R: CryptoRng + RngCore>(rng: &mut R) -> RecordOpening {
         let pid_b = InnerScalarField::rand(rng);

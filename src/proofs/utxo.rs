@@ -30,15 +30,15 @@ use ark_std::{
     vec::Vec,
 };
 use jf_plonk::{
-    circuit::Circuit,
-    proof_system::{PlonkKzgSnark, Snark},
+    proof_system::{PlonkKzgSnark, UniversalSNARK},
     transcript::StandardTranscript,
 };
 use jf_primitives::merkle_tree::AccMemberWitness;
+use jf_relation::Circuit;
 
 /// The UTXO part of the proving key
-pub type UtxoProvingKey<'a> =
-    jf_plonk::proof_system::structs::ProvingKey<'a, crate::types::InnerPairingEngine>;
+pub type UtxoProvingKey =
+    jf_plonk::proof_system::structs::ProvingKey<crate::types::InnerPairingEngine>;
 
 /// The UTXO part of the verifying key
 pub type UtxoVerifyingKey =
@@ -263,8 +263,8 @@ mod tests {
     };
     use ark_ff::{UniformRand, Zero};
     use ark_std::{rand::Rng, vec};
-    use jf_plonk::circuit::Circuit;
     use jf_primitives::merkle_tree::{AccMemberWitness, MerkleTree};
+    use jf_relation::Circuit;
 
     #[test]
     fn test_pub_input_order_consistency() {

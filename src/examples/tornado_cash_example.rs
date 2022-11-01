@@ -23,8 +23,8 @@
 //! is a combination of predicates and circuits
 //! (which are simple wrappers of `Predicate` and `PredicateCircuit`).
 //! This requires implementation of the following traits
-//! - BirthPredicateCircuit
-//! - DeathPredicateCircuit
+//! - TypeACircuit
+//! - TypeBCircuit
 //! - PredicateOps
 //!
 //! Once the application is built, we take the following steps to generate a
@@ -74,7 +74,7 @@
 //! implemented via the default implementation.
 //! So here we only need to write the logic for the death predicate.
 
-use super::{BirthPredicateCircuit, DeathPredicateCircuit, PredicateOps};
+use super::{PredicateOps, TypeACircuit, TypeBCircuit};
 use crate::{
     circuit::{
         local_data::local_data_commitment_circuit,
@@ -91,7 +91,7 @@ use crate::{
     types::{InnerScalarField, InnerUniversalParam, OuterUniversalParam},
 };
 use ark_std::vec::Vec;
-use jf_plonk::circuit::{Arithmetization, Circuit, PlonkCircuit, Variable};
+use jf_relation::{Arithmetization, Circuit, MergeableCircuitType, PlonkCircuit, Variable};
 
 // A simple wrapper of predicate circuit
 struct TcashPredicateCircuit(PredicateCircuit);
@@ -103,9 +103,9 @@ impl From<PredicateCircuit> for TcashPredicateCircuit {
 }
 
 // A simple wrapper of predicate
-struct TcashPredicate<'a>(Predicate<'a>);
-impl<'a> From<Predicate<'a>> for TcashPredicate<'a> {
-    fn from(predicate: Predicate<'a>) -> Self {
+struct TcashPredicate(Predicate);
+impl From<Predicate> for TcashPredicate {
+    fn from(predicate: Predicate) -> Self {
         Self(predicate)
     }
 }
@@ -114,7 +114,7 @@ impl<'a> From<Predicate<'a>> for TcashPredicate<'a> {
 // 1. all asset_ids match
 // 2. sum inputs = sum outputs
 // 3. all the inputs are correctly w.r.t. commitment
-impl BirthPredicateCircuit for TcashPredicateCircuit {
+impl TypeACircuit for TcashPredicateCircuit {
     // Our code requires that #gates in a birth circuit to be greater
     // than that of a death circuit. If birth circuit has smaller size,
     // we need to pad the birth circuit to make it larger.
@@ -125,7 +125,7 @@ impl BirthPredicateCircuit for TcashPredicateCircuit {
 }
 
 // Extra, application dependent logics are defined in this circuit.
-impl DeathPredicateCircuit for TcashPredicateCircuit {
+impl TypeBCircuit for TcashPredicateCircuit {
     // we want to check:
     //  - it uses a same local data commitment as the birth predicate
     //  - each input/output value is within {0, 1, 5, 10, 50, 100}
@@ -197,13 +197,13 @@ impl DeathPredicateCircuit for TcashPredicateCircuit {
             .0
              .0
             .num_gates();
-        death_circuit.pad_gate(target_gate_count - current_gate_count);
+        death_circuit.pad_gates(target_gate_count - current_gate_count);
 
         Ok(TcashPredicateCircuit(PredicateCircuit(death_circuit)))
     }
 }
 
-impl<'a> PredicateOps<'a> for TcashPredicate<'a> {
+impl<'a> PredicateOps<'a> for TcashPredicate {
     /// Setup the circuit and related parameters
     ///
     /// Inputs:
@@ -225,7 +225,7 @@ impl<'a> PredicateOps<'a> for TcashPredicate<'a> {
         entire_input_size: usize,
     ) -> Result<
         (
-            DPCProvingKey<'a>,
+            DPCProvingKey,
             DPCVerifyingKey,
             Self,
             PolicyIdentifier,
@@ -247,7 +247,7 @@ impl<'a> PredicateOps<'a> for TcashPredicate<'a> {
         birth_predicate_circuit
             .0
              .0
-            .finalize_for_mergeable_circuit(jf_plonk::MergeableCircuitType::TypeA)?;
+            .finalize_for_mergeable_circuit(MergeableCircuitType::TypeA)?;
 
         // the inner domain size is the birth (or death) circuit's domain size
         let inner_domain_size = birth_predicate_circuit.0 .0.eval_domain_size()?;
@@ -311,9 +311,9 @@ impl<'a> PredicateOps<'a> for TcashPredicate<'a> {
         // finalize the circuit, and update the witness accordingly
 
         let circuit_type = if is_birth_predicate {
-            jf_plonk::MergeableCircuitType::TypeA
+            MergeableCircuitType::TypeA
         } else {
-            jf_plonk::MergeableCircuitType::TypeB
+            MergeableCircuitType::TypeB
         };
 
         final_circuit
@@ -333,12 +333,12 @@ fn valid_note_gate(
     var: Variable,
     note_vars: &[Variable],
 ) -> Result<(), DPCApiError> {
-    let is_zero = circuit.check_equal(var, note_vars[0])?;
-    let is_one = circuit.check_equal(var, note_vars[1])?;
-    let is_five = circuit.check_equal(var, note_vars[2])?;
-    let is_ten = circuit.check_equal(var, note_vars[3])?;
-    let is_fifty = circuit.check_equal(var, note_vars[4])?;
-    let is_hundred = circuit.check_equal(var, note_vars[5])?;
+    let is_zero = circuit.is_equal(var, note_vars[0])?;
+    let is_one = circuit.is_equal(var, note_vars[1])?;
+    let is_five = circuit.is_equal(var, note_vars[2])?;
+    let is_ten = circuit.is_equal(var, note_vars[3])?;
+    let is_fifty = circuit.is_equal(var, note_vars[4])?;
+    let is_hundred = circuit.is_equal(var, note_vars[5])?;
 
     // in fact it makes more sense to use an xor gate here;
     // but or gate is also sufficient
@@ -350,7 +350,7 @@ fn valid_note_gate(
     res = circuit.logic_or(res, is_hundred)?;
 
     // enforce res is true
-    circuit.equal_gate(res, circuit.one())?;
+    circuit.enforce_equal(res.into(), circuit.one())?;
     Ok(())
 }
 
@@ -506,11 +506,8 @@ mod test {
             blinding_local_data,
         )?;
 
-        let pub_input = DPCPublicInput::from_witness(
-            &witness,
-            dummy_memo.to_vec(),
-            inner_srs.powers_of_g_ref()[1],
-        )?;
+        let pub_input =
+            DPCPublicInput::from_witness(&witness, dummy_memo.to_vec(), inner_srs.powers_of_g[1])?;
 
         // generate the proof and verify it
         let dpc_proof = prove(rng, &dpc_pk, &witness, &pub_input)?;

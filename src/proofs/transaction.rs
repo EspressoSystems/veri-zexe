@@ -57,16 +57,16 @@ pub struct DPCValidityProof {
     pub(crate) inner_partial_vfy_proof: InnerPartialVfyProof,
 }
 
-#[derive(Clone, Debug, PartialEq)] // TODO: derive hash and serialize/deserialize
+#[derive(Clone, Debug, PartialEq, Eq)] // TODO: derive hash and serialize/deserialize
 /// DPC Transaction proving key
-pub struct DPCProvingKey<'a> {
-    utxo_proving_key: UtxoProvingKey<'a>,
-    policies_vfy_proving_key: PoliciesVfyProvingKey<'a>,
+pub struct DPCProvingKey {
+    utxo_proving_key: UtxoProvingKey,
+    policies_vfy_proving_key: PoliciesVfyProvingKey,
     // A group element used in inner predicate proofs verification circuit.
     pub(crate) beta_g: InnerG1Affine,
 }
 
-#[derive(Clone, Debug, PartialEq, CanonicalSerialize)] // TODO: derive hash and serialize/deserialize
+#[derive(Clone, Debug, PartialEq, Eq, CanonicalSerialize)] // TODO: derive hash and serialize/deserialize
 /// DPC Transaction verifying key
 pub struct DPCVerifyingKey {
     utxo_verifying_key: UtxoVerifyingKey,
@@ -217,12 +217,12 @@ impl DPCPublicInput {
 /// - DPC proving key
 /// - DPC verification key
 /// - total number of constraints of the utxo/outer circuit
-pub fn preprocess<'a>(
-    outer_srs: &'a OuterUniversalParam,
-    inner_srs: &'a InnerUniversalParam,
+pub fn preprocess(
+    outer_srs: &OuterUniversalParam,
+    inner_srs: &InnerUniversalParam,
     num_inputs: usize,
     unmerged_inner_policy_domain_size: usize,
-) -> Result<(DPCProvingKey<'a>, DPCVerifyingKey, (usize, usize)), DPCApiError> {
+) -> Result<(DPCProvingKey, DPCVerifyingKey, (usize, usize)), DPCApiError> {
     let (utxo_proving_key, utxo_verifying_key, utxo_n_constraints) =
         preprocess_utxo_keys(inner_srs, num_inputs)?;
 
@@ -246,7 +246,7 @@ pub fn preprocess<'a>(
     let dpc_proving_key = DPCProvingKey {
         utxo_proving_key,
         policies_vfy_proving_key,
-        beta_g: inner_srs.powers_of_g_ref()[1],
+        beta_g: inner_srs.powers_of_g[1],
     };
 
     let dpc_verifying_key = DPCVerifyingKey {
@@ -356,11 +356,11 @@ mod tests {
     };
     use ark_ff::{One, Zero};
     use ark_std::{rand::Rng, test_rng, vec};
-    use jf_plonk::circuit::{Circuit, PlonkCircuit};
     use jf_primitives::{
         circuit::commitment::CommitmentGadget,
         merkle_tree::{AccMemberWitness, MerkleTree},
     };
+    use jf_relation::{Circuit, MergeableCircuitType, PlonkCircuit};
 
     const INNER_DOMAIN_SIZE_FOR_TEST: usize = 1 << 12;
 
@@ -408,8 +408,7 @@ mod tests {
             &output_birth_predicates[..],
             blinding_local_data,
         )?;
-        let pub_input =
-            DPCPublicInput::from_witness(&witness, memo, inner_srs.powers_of_g_ref()[1])?;
+        let pub_input = DPCPublicInput::from_witness(&witness, memo, inner_srs.powers_of_g[1])?;
         let dpc_proof = prove(rng, &dpc_pk, &witness, &pub_input)?;
 
         // good path
@@ -492,7 +491,7 @@ mod tests {
             .commit(&compressed_local_data_vars[..], blinding_local_data)
             .unwrap();
         inner_pred_cs
-            .equal_gate(derived_comm_local_data, comm_local_data)
+            .enforce_equal(derived_comm_local_data, comm_local_data)
             .unwrap();
         PredicateCircuit(inner_pred_cs)
     }
@@ -508,8 +507,8 @@ mod tests {
         (
             Vec<NoteInput<'b>>,
             Vec<RecordOpening>,
-            Vec<Predicate<'a>>,
-            Vec<Predicate<'a>>,
+            Vec<Predicate>,
+            Vec<Predicate>,
             Vec<InnerScalarField>,
             InnerScalarField,
         ),
@@ -615,12 +614,12 @@ mod tests {
         let mut inner_birth_pred_cs = inner_pred_cs.clone();
         inner_birth_pred_cs
             .0
-            .finalize_for_mergeable_circuit(jf_plonk::MergeableCircuitType::TypeA)
+            .finalize_for_mergeable_circuit(MergeableCircuitType::TypeA)
             .unwrap();
         let mut inner_death_pred_cs = inner_pred_cs;
         inner_death_pred_cs
             .0
-            .finalize_for_mergeable_circuit(jf_plonk::MergeableCircuitType::TypeB)
+            .finalize_for_mergeable_circuit(MergeableCircuitType::TypeB)
             .unwrap();
         birth_predicate.update_witness(inner_birth_pred_cs)?;
         death_predicate.update_witness(inner_death_pred_cs)?;

@@ -19,19 +19,15 @@ use crate::{
 };
 use ark_ff::Zero;
 use ark_std::{format, vec, vec::Vec};
-use jf_plonk::{
-    circuit::{
-        customized::{
-            ecc::{Point, PointVariable},
-            rescue::RescueGadget,
-        },
-        Circuit, PlonkCircuit, Variable,
-    },
-    errors::PlonkError,
-};
+use jf_plonk::errors::PlonkError;
 use jf_primitives::circuit::{
     commitment::CommitmentGadget,
     merkle_tree::{AccElemVars, MerkleTreeGadget},
+    rescue::RescueGadget,
+};
+use jf_relation::{
+    gadgets::ecc::{Point, PointVariable},
+    BoolVar, Circuit, PlonkCircuit, Variable,
 };
 
 pub(crate) struct DPCUtxoWitnessVar {
@@ -160,7 +156,7 @@ impl DPCUtxoCircuit {
         }
 
         // check aggregated randomized verification key
-        circuit.point_equal_gate(
+        circuit.enforce_point_equal(
             &public_input_var.authorization_verification_key,
             &derived_authorization_key,
         )?;
@@ -191,7 +187,7 @@ impl DPCUtxoCircuit {
 
             let derived_ldata_com =
                 circuit.commit(&compressed_local_data, witness_var.blinding_local_data)?;
-            circuit.equal_gate(derived_ldata_com, public_input_var.local_data_commitment)?;
+            circuit.enforce_equal(derived_ldata_com, public_input_var.local_data_commitment)?;
         }
 
         // check commitment predicates
@@ -209,7 +205,7 @@ impl DPCUtxoCircuit {
             pids.extend(output_pid_birth.iter());
             let derived_predicates_commitment =
                 circuit.commit(&pids, witness_var.blinding_predicates)?;
-            circuit.equal_gate(
+            circuit.enforce_equal(
                 derived_predicates_commitment,
                 public_input_var.predicates_commitment,
             )?;
@@ -231,7 +227,7 @@ impl DPCUtxoCircuit {
         public_nullifier: Variable,
         public_root: Variable,
     ) -> Result<(Variable, PointVariable), PlonkError> {
-        circuit.bool_gate(input.record_opening_var.payload.is_dummy)?;
+        circuit.enforce_bool(input.record_opening_var.payload.is_dummy)?;
         let is_dummy = input.record_opening_var.payload.is_dummy;
         // derive commitment
         let record_commitment = input
@@ -246,15 +242,15 @@ impl DPCUtxoCircuit {
             &input.acc_member_witness_var.merkle_path,
         )?;
 
-        let is_in_acc = circuit.check_equal(derived_root, public_root)?;
-        circuit.logic_or_gate(is_dummy, is_in_acc)?;
+        let is_in_acc = circuit.is_equal(derived_root, public_root)?;
+        circuit.logic_or_gate(BoolVar(is_dummy), is_in_acc)?;
 
         // check correct nullifier
         let nullifier = input
             .record_opening_var
             .nullify(circuit, &input.proof_generation_key_var.nk)?;
-        let correct_nullifier = circuit.check_equal(nullifier, public_nullifier)?;
-        circuit.logic_or_gate(is_dummy, correct_nullifier)?;
+        let correct_nullifier = circuit.is_equal(nullifier, public_nullifier)?;
+        circuit.logic_or_gate(BoolVar(is_dummy), correct_nullifier)?;
 
         // compute randomized authorization key
         let rand_auth_key = circuit.ecc_add::<InnerEmbeddedGroup>(
@@ -266,9 +262,8 @@ impl DPCUtxoCircuit {
         let diversifier = input
             .proof_generation_key_var
             .derive_diversifier(circuit, input.diversifier_randomizer_var)?;
-        let correct_diversifier =
-            circuit.check_equal(diversifier, input.record_opening_var.addr.0)?;
-        circuit.logic_or_gate(is_dummy, correct_diversifier)?;
+        let correct_diversifier = circuit.is_equal(diversifier, input.record_opening_var.addr.0)?;
+        circuit.logic_or_gate(BoolVar(is_dummy), correct_diversifier)?;
 
         Ok((record_commitment, rand_auth_key))
     }
@@ -281,15 +276,15 @@ impl DPCUtxoCircuit {
         first_nullifier: Variable,
     ) -> Result<(), PlonkError> {
         // derive correct nonce
-        let is_not_dummy = circuit.check_is_zero(output.payload.is_dummy)?;
+        let is_not_dummy = circuit.is_zero(output.payload.is_dummy)?;
         let is_dummy = circuit.logic_neg(is_not_dummy)?;
         let i_var = circuit.create_variable(InnerScalarField::from(position_in_note as u64))?;
         let msg = [i_var, first_nullifier, circuit.one()]; // add one as official padding
         let derived_nonce = circuit.rescue_sponge_no_padding(&msg, 1)?[0];
-        let correct_nonce = circuit.check_equal(derived_nonce, output.nonce)?; // should I avoid this gate and replace output_ro.nonce with derived_nonce
+        let correct_nonce = circuit.is_equal(derived_nonce, output.nonce)?; // should I avoid this gate and replace output_ro.nonce with derived_nonce
         circuit.logic_or_gate(correct_nonce, is_dummy)?;
         let derived_output_rc = output.derive_record_commitment_var(circuit)?;
-        let correct_rc = circuit.check_equal(derived_output_rc, output_rc_var)?;
+        let correct_rc = circuit.is_equal(derived_output_rc, output_rc_var)?;
         circuit.logic_or_gate(correct_rc, is_dummy)?;
 
         Ok(())
@@ -313,8 +308,8 @@ mod test {
         rand::{CryptoRng, Rng, RngCore},
         vec,
     };
-    use jf_plonk::circuit::{Circuit, PlonkCircuit};
     use jf_primitives::merkle_tree::{AccMemberWitness, MerkleTree};
+    use jf_relation::{Circuit, PlonkCircuit};
 
     #[test]
     fn test_spend() {

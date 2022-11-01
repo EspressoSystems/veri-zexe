@@ -3,7 +3,7 @@
 .idea
 /target
 cargo-system-config.toml
-Cargo.lock
+# Cargo.lock
 
 # Test coverage (grcov)
 default.profraw

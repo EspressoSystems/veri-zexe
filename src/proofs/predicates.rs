@@ -25,15 +25,14 @@ use ark_std::{
     vec::Vec,
 };
 use jf_plonk::{
-    circuit::{Circuit, PlonkCircuit},
     proof_system::{
         batch_arg::{BatchArgument, Instance as PlonkPredicate},
         structs::{BatchProof, OpenKey, ProvingKey, VerifyingKey},
         PlonkKzgSnark,
     },
     transcript::RescueTranscript,
-    MergeableCircuitType,
 };
+use jf_relation::{Circuit, MergeableCircuitType, PlonkCircuit};
 
 use super::policies_vfy::InnerPartialVfyProof;
 
@@ -44,20 +43,20 @@ pub struct PredicateCircuit(pub(crate) PlonkCircuit<InnerScalarField>);
 /// This type can be an instantiation of either a birth predicate or a death
 /// predicate
 #[derive(Clone)]
-pub struct Predicate<'a> {
+pub struct Predicate {
     pub(crate) is_finalized: bool,
-    pub(crate) predicate: PlonkPredicate<'a, InnerPairingEngine>,
+    pub(crate) predicate: PlonkPredicate<InnerPairingEngine>,
 }
 
-impl<'a> PredicateTrait<'a> for Predicate<'a> {
+impl<'a> PredicateTrait<'a> for Predicate {
     /// the actual, unwrapped predicate.
-    type PlonkPredicate = PlonkPredicate<'a, InnerPairingEngine>;
+    type PlonkPredicate = PlonkPredicate<InnerPairingEngine>;
 
     /// the circuit corresponding to this predicate
     type PredicateCircuit = PredicateCircuit;
 
     /// Proving key
-    type ProvingKey = ProvingKey<'a, InnerPairingEngine>;
+    type ProvingKey = ProvingKey<InnerPairingEngine>;
 
     /// Verification key
     type VerificationKey = VerifyingKey<InnerPairingEngine>;
@@ -140,7 +139,7 @@ where
     P: PredicateTrait<
         'a,
         Proof = BatchProof<InnerPairingEngine>,
-        PlonkPredicate = PlonkPredicate<'a, InnerPairingEngine>,
+        PlonkPredicate = PlonkPredicate<InnerPairingEngine>,
     >,
 {
     let birth_predicates: Vec<P::PlonkPredicate> =
@@ -148,7 +147,7 @@ where
     let death_predicates: Vec<P::PlonkPredicate> =
         death_predicates.iter().map(|x| x.predicate()).collect();
 
-    let proof = BatchArgument::<'a, InnerPairingEngine>::batch_prove::<
+    let proof = BatchArgument::<InnerPairingEngine>::batch_prove::<
         R,
         RescueTranscript<InnerBaseField>,
     >(rng, &birth_predicates, &death_predicates)
@@ -231,7 +230,7 @@ mod tests {
     use super::*;
     use ark_ff::UniformRand;
     use ark_std::{test_rng, vec};
-    use jf_plonk::{circuit::Circuit, proof_system::PlonkKzgSnark};
+    use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
 
     #[test]
     fn test_predicate_proof() -> Result<(), DPCApiError> {
@@ -317,7 +316,7 @@ mod tests {
         shared_public_input: InnerScalarField,
         i: usize,
         is_birth_predicate: bool,
-    ) -> Result<<Predicate<'a> as PredicateTrait<'a>>::PredicateCircuit, DPCApiError> {
+    ) -> Result<<Predicate as PredicateTrait<'a>>::PredicateCircuit, DPCApiError> {
         let mut circuit = PlonkCircuit::new_turbo_plonk();
         let shared_pub_var = circuit.create_public_variable(shared_public_input)?;
         let mut var = shared_pub_var;

@@ -31,10 +31,10 @@ use crate::{
     types::{InnerScalarField, InnerUniversalParam, OuterUniversalParam},
 };
 use ark_std::{format, vec, vec::Vec, Zero};
-use jf_plonk::circuit::{Circuit, PlonkCircuit};
+use jf_relation::{Circuit, PlonkCircuit};
 
 /// A birth predicate that is shared among all example applications.
-pub(crate) trait BirthPredicateCircuit
+pub(crate) trait TypeACircuit
 where
     Self: Sized + From<PredicateCircuit>,
 {
@@ -85,12 +85,12 @@ where
         )?;
 
         // 2. all asset_ids match; asset_id is encoded in the first byte of payload
-        let asset_id = entire_input_notes_vars[0].record_opening_var.payload.data[0];
-        for note in entire_input_notes_vars.iter().skip(1) {
-            birth_circuit.equal_gate(asset_id, note.record_opening_var.payload.data[0])?;
+        let asset_id = entire_input_notes_vars[1].record_opening_var.payload.data[0];
+        for note in entire_input_notes_vars.iter().skip(2) {
+            birth_circuit.enforce_equal(asset_id, note.record_opening_var.payload.data[0])?;
         }
-        for record in entire_outputs_vars.iter() {
-            birth_circuit.equal_gate(asset_id, record.payload.data[0])?;
+        for record in entire_outputs_vars.iter().skip(1) {
+            birth_circuit.enforce_equal(asset_id, record.payload.data[0])?;
         }
 
         // 3. sum inputs = sum outputs
@@ -103,11 +103,11 @@ where
         for record in entire_outputs_vars.iter().skip(1) {
             sum_output_var = birth_circuit.add(sum_output_var, record.payload.data[1])?;
         }
-        birth_circuit.equal_gate(sum_input_var, sum_output_var)?;
+        birth_circuit.enforce_equal(sum_input_var, sum_output_var)?;
 
         // pad the birth circuit with dummy gates so that it will always be greater
         // than the supported death ones
-        birth_circuit.pad_gate(Self::PAD_GATES);
+        birth_circuit.pad_gates(Self::PAD_GATES);
 
         Ok(Self::from(PredicateCircuit(birth_circuit)))
     }
@@ -169,9 +169,9 @@ where
 }
 
 /// A death predicate that may vary among example applications.
-pub(crate) trait DeathPredicateCircuit
+pub(crate) trait TypeBCircuit
 where
-    Self: Sized + From<PredicateCircuit> + BirthPredicateCircuit,
+    Self: Sized + From<PredicateCircuit> + TypeACircuit,
 {
     /// Internal function that generates the actual circuit for the
     /// customized statements.
@@ -233,7 +233,7 @@ where
 
 pub(crate) trait PredicateOps<'a>
 where
-    Self: Sized + From<Predicate<'a>>,
+    Self: Sized + From<Predicate>,
 {
     /// Setup the circuit and related parameters
     ///
@@ -256,7 +256,7 @@ where
         entire_input_size: usize,
     ) -> Result<
         (
-            DPCProvingKey<'a>,
+            DPCProvingKey,
             DPCVerifyingKey,
             Self,
             PolicyIdentifier,
