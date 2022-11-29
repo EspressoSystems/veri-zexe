@@ -704,7 +704,7 @@ checksum = "4217ad341ebadf8d8e724e264f13e593e0648f5b3e94b3896a5df283be015ecc"
 [[package]]
 name = "jf-plonk"
 version = "0.1.2"
-source = "git+https://github.com/EspressoSystems/jellyfish.git#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
+source = "git+https://github.com/EspressoSystems/jellyfish.git?rev=64f55becffe0b93bfef2c6dc49274ef54d5ff6fc#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -736,7 +736,7 @@ dependencies = [
 [[package]]
 name = "jf-primitives"
 version = "0.1.2"
-source = "git+https://github.com/EspressoSystems/jellyfish.git#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
+source = "git+https://github.com/EspressoSystems/jellyfish.git?rev=64f55becffe0b93bfef2c6dc49274ef54d5ff6fc#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -771,7 +771,7 @@ dependencies = [
 [[package]]
 name = "jf-relation"
 version = "0.1.2"
-source = "git+https://github.com/EspressoSystems/jellyfish.git#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
+source = "git+https://github.com/EspressoSystems/jellyfish.git?rev=64f55becffe0b93bfef2c6dc49274ef54d5ff6fc#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -797,7 +797,7 @@ dependencies = [
 [[package]]
 name = "jf-utils"
 version = "0.1.2"
-source = "git+https://github.com/EspressoSystems/jellyfish.git#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
+source = "git+https://github.com/EspressoSystems/jellyfish.git?rev=64f55becffe0b93bfef2c6dc49274ef54d5ff6fc#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
 dependencies = [
  "anyhow",
  "ark-ec",
@@ -816,7 +816,7 @@ dependencies = [
 [[package]]
 name = "jf-utils-derive"
 version = "0.1.2"
-source = "git+https://github.com/EspressoSystems/jellyfish.git#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
+source = "git+https://github.com/EspressoSystems/jellyfish.git?rev=64f55becffe0b93bfef2c6dc49274ef54d5ff6fc#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
 dependencies = [
  "ark-std",
  "quote",

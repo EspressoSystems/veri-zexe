@@ -19,9 +19,9 @@ chacha20poly1305 = "0.9.0"
 curve25519-dalek = "4.0.0-pre.1"
 displaydoc = { version = "0.2.3", default-features = false }
 hkdf = "0.12.0"
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish.git" }
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish.git" }
-jf-relation = { git = "https://github.com/EspressoSystems/jellyfish.git" }
-jf-utils = { git = "https://github.com/EspressoSystems/jellyfish.git" }
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish.git", rev = "64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"}
+jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish.git", rev = "64f55becffe0b93bfef2c6dc49274ef54d5ff6fc" }
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish.git", rev = "64f55becffe0b93bfef2c6dc49274ef54d5ff6fc" }
+jf-utils = { git = "https://github.com/EspressoSystems/jellyfish.git", rev = "64f55becffe0b93bfef2c6dc49274ef54d5ff6fc" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 sha2 = { version = "0.10.1", default-features = false }
