@@ -16,7 +16,7 @@ ark-ff = { version = "0.3.0", default-features = false }
 ark-serialize = { version = "0.3.0", default-features = false }
 ark-std = { version = "0.3.0", default-features = false }
 chacha20poly1305 = "0.9.0"
-curve25519-dalek = "4.0.0-pre.1"
+curve25519-dalek = "4.0.0-pre.3"
 displaydoc = { version = "0.2.3", default-features = false }
 hkdf = "0.12.0"
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish.git", rev = "64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"}
