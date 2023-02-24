@@ -29,7 +29,7 @@ use jf_utils::{to_bytes, Vec};
 use std::time::Instant;
 
 #[test]
-#[ignore]
+// #[ignore]
 fn dpc_bench() -> Result<(), DPCApiError> {
     let rng = &mut ark_std::test_rng();
     // NOTE: for predicate circuit of size 2^15, SRS degree for inner and outer are:
@@ -69,7 +69,7 @@ fn dpc_bench() -> Result<(), DPCApiError> {
     zcash_transaction_full_cycle(&inner_srs, &outer_srs, 2)?;
     zcash_transaction_full_cycle(&inner_srs, &outer_srs, 3)?;
     zcash_transaction_full_cycle(&inner_srs, &outer_srs, 4)?;
-    zcash_transaction_full_cycle(&inner_srs, &outer_srs, 5)?;
+    // zcash_transaction_full_cycle(&inner_srs, &outer_srs, 5)?;
 
     Ok(())
 }
