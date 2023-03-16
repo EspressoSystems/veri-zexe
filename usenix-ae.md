@@ -5,6 +5,7 @@
 First, ensure you have [Rust](https://www.rust-lang.org/tools/install) installed. 
 Then, try to run `cargo build --release` to compile the project.
 
+
 ## E1: Benchmark using a powerful server
 
 In your AWS EC2 instance of type `c5a.16xlarge` (64 vCPU, 128GB RAM), simply run:
@@ -12,6 +13,8 @@ In your AWS EC2 instance of type `c5a.16xlarge` (64 vCPU, 128GB RAM), simply run
 ```
 cargo test dpc_bench --release -- --nocapture
 ```
+
+> ⚠️ If you run on MacOS, you won't see memory usage report in the log since we rely on a crate [`proc-status`](https://github.com/Canop/proc-status) that only works on Linux machines.
 
 You should see terminal output logs similar to the following:
 
