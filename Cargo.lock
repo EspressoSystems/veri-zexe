@@ -54,7 +54,7 @@ source = "git+https://github.com/arkworks-rs/curves?rev=677b4ae751a274037880ede8
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -65,7 +65,7 @@ checksum = "65be532f9dd1e98ad0150b037276cde464c6f371059e6dd02c0222395761f6aa"
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -76,7 +76,7 @@ checksum = "ea691771ebbb28aea556c044e2e5c5227398d840cee0c34d4d20fa8eb2689e8c"
 dependencies = [
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -87,7 +87,7 @@ dependencies = [
  "ark-bls12-377",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -98,7 +98,7 @@ checksum = "dea978406c4b1ca13c2db2373b05cc55429c3575b8b21f1b9ee859aa5b03dd42"
 dependencies = [
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "num-traits",
  "rayon",
@@ -113,7 +113,7 @@ dependencies = [
  "ark-bls12-377",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -125,7 +125,7 @@ dependencies = [
  "ark-bls12-381",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -137,7 +137,7 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff",
- "ark-std",
+ "ark-std 0.3.0",
 ]
 
 [[package]]
@@ -149,7 +149,7 @@ dependencies = [
  "ark-ff-asm",
  "ark-ff-macros",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "num-bigint",
  "num-traits",
@@ -189,7 +189,7 @@ checksum = "7b0f78f47537c2f15706db7e98fe64cc1711dbf9def81218194e17239e53e5aa"
 dependencies = [
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "hashbrown 0.11.2",
  "rayon",
@@ -202,7 +202,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d6c2b318ee6e10f8c2853e73a83adc0ccb88995aa978d8a3408d492ab2ee671"
 dependencies = [
  "ark-serialize-derive",
- "ark-std",
+ "ark-std 0.3.0",
  "digest 0.9.0",
 ]
 
@@ -226,6 +226,16 @@ dependencies = [
  "num-traits",
  "rand",
  "rayon",
+]
+
+[[package]]
+name = "ark-std"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
+dependencies = [
+ "num-traits",
+ "rand",
 ]
 
 [[package]]
@@ -714,7 +724,7 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "displaydoc",
  "downcast-rs",
@@ -749,7 +759,7 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "blst",
  "crypto_box",
  "derivative",
@@ -781,7 +791,7 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "derivative",
  "displaydoc",
  "downcast-rs",
@@ -803,7 +813,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.3.0",
  "digest 0.10.5",
  "displaydoc",
  "jf-utils-derive",
@@ -818,7 +828,7 @@ name = "jf-utils-derive"
 version = "0.1.2"
 source = "git+https://github.com/EspressoSystems/jellyfish.git?rev=64f55becffe0b93bfef2c6dc49274ef54d5ff6fc#64f55becffe0b93bfef2c6dc49274ef54d5ff6fc"
 dependencies = [
- "ark-std",
+ "ark-std 0.3.0",
  "quote",
  "syn 1.0.103",
 ]
@@ -1402,7 +1412,7 @@ dependencies = [
  "ark-ed-on-bls12-377",
  "ark-ff",
  "ark-serialize",
- "ark-std",
+ "ark-std 0.4.0",
  "chacha20poly1305 0.9.1",
  "curve25519-dalek 4.0.0-pre.1",
  "displaydoc",
