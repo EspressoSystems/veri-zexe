@@ -12,7 +12,7 @@ ark-bls12-377 = { git = "https://github.com/arkworks-rs/curves", default-feature
 ark-bw6-761 = { git = "https://github.com/arkworks-rs/curves", rev = "677b4ae751a274037880ede86e9b6f30f62635af" }
 ark-ec = { version = "0.3.0", default-features = false }
 ark-ed-on-bls12-377 = { git = "https://github.com/arkworks-rs/curves", default-features = false, rev = "677b4ae751a274037880ede86e9b6f30f62635af" }
-ark-ff = { version = "0.3.0", default-features = false }
+ark-ff = { version = "0.4.2", default-features = false }
 ark-serialize = { version = "0.3.0", default-features = false }
 ark-std = { version = "0.3.0", default-features = false }
 chacha20poly1305 = "0.9.0"
